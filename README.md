@@ -100,6 +100,8 @@ receive energy view that displays spectrum energy per physical layer
 subid (waveform) along with a selectable per subid waterfall history
 view.
 
+![exp-04 node-6 spectrum analyzer](images/emane-spectrum-analyzer.png)
+
 Below is a sample command line for executing `emane-spectrum-analyzer`
 for viewing *node-6*'s measurement stream in exp-04. The
 `--subid-name` option can by used to provide waveform labels when
