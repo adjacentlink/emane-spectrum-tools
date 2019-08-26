@@ -1,0 +1,56 @@
+# autotools
+Makefile
+Makefile.in
+configure
+libtool
+config
+config.status
+config.log
+aclocal.m4
+autom4te.cache
+*.o
+compile
+config.guess
+config.sub
+depcomp
+install-sh
+libtool.m4
+ltmain.sh
+ltoptions.m4
+ltsugar.m4
+ltversion.m4
+lt~obsolete.m4
+missing
+
+# protocol buffers output
+*.pb.cc
+*.pb.h
+*_pb2.py
+
+# object files/dependencies
+*.la
+*.lo
+*.o
+**/.deps
+**/.libs
+
+# python build
+*.pyc
+src/python/build
+src/python/setup.py
+
+# dist
+emane-spectrum-tools-*.tar.gz
+
+# make install
+src/python/.installedfiles
+
+# applications
+src/emane-spectrum-monitor/emane-spectrum-monitor
+
+# rpm
+.rpmbuild
+emane-spectrum-tools.spec
+
+# deb
+.debbuild
