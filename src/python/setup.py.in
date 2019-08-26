@@ -1,0 +1,16 @@
+from distutils.core import setup
+
+setup(name='emane_spectrum_tools',
+      version='@VERSION@',
+      description='EMANE spectrum modules and utilities',
+      long_description='EMANE spectrum modules and utilities',
+      author='Adjacent Link',
+      author_email='emane at adjacent link dot com',
+      url="https://github.com/adjacentlink/emane-spectrum-tools",
+      packages=['emane_spectrum_tools',
+                'emane_spectrum_tools.interface',
+                'emane_spectrum_tools.streamer'],
+      scripts=['scripts/emane-spectrum-analyzer'],
+      license = 'BSD'
+      )
+

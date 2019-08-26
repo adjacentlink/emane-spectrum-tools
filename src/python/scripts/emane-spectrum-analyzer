@@ -1,0 +1,610 @@
+#!/usr/bin/env python
+#
+# Copyright (c) 2018 - Adjacent Link LLC, Bridgewater, New Jersey
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# * Redistributions of source code must retain the above copyright
+#   notice, this list of conditions and the following disclaimer.
+# * Redistributions in binary form must reproduce the above copyright
+#   notice, this list of conditions and the following disclaimer in
+#   the documentation and/or other materials provided with the
+#   distribution.
+# * Neither the name of Adjacent Link LLC nor the names of its
+#   contributors may be used to endorse or promote products derived
+#   from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+
+from __future__ import absolute_import, division, print_function
+
+import sys
+import pandas as pd
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from matplotlib.ticker import EngFormatter
+from matplotlib import colors
+import matplotlib.gridspec as gridspec
+import traceback
+import re
+from argparse import ArgumentParser
+from collections import defaultdict
+from collections import deque
+from itertools import cycle
+from copy import copy
+import warnings
+import daemon
+
+from emane_spectrum_tools.streamer import SpectrumEnergyStreamer
+
+class SpectrumAnalyzer(object):
+    def __init__(self,
+                 stream,
+                 endpoint,
+                 hz_min,
+                 hz_max,
+                 hz_step,
+                 with_waveforms,
+                 with_grid,
+                 subid_name_map):
+        self._stream = stream
+        self._hz_step = hz_step
+        self._with_waveforms = with_waveforms
+        self._with_grid = with_grid
+        self._subid_name_map = subid_name_map
+        self._lines = {}
+        self._line_total = None
+        self._lines_wf = {}
+        self._wfall_total = None
+        self._wfall_wf= None
+
+        self._min_y_total = np.nan
+        self._max_y_total = np.nan
+        self._min_y_wf = np.nan
+        self._max_y_wf = np.nan
+
+        self._last_sequence = None
+
+        self._freq_range_hz = (hz_min,hz_max)
+        self._min_freq_hz = int(np.floor(self._freq_range_hz[0] / self._hz_step) * self._hz_step)
+        self._max_freq_hz = int(np.ceil(self._freq_range_hz[1] / self._hz_step) * self._hz_step)
+
+        self._freq_values = list(range(self._min_freq_hz,self._max_freq_hz + self._hz_step,self._hz_step))
+
+        self._waterfall_total = defaultdict(lambda : deque([np.nan] * 100,maxlen=100))
+
+        self._waterfall_subid_wf = defaultdict(lambda: defaultdict(lambda : deque([np.nan] * 100,maxlen=100)))
+
+        self._subids = set()
+        self._cycle_subid = cycle([])
+        self._subid_wf_select = None
+        self._alert = False
+
+        # older matplotlib does not have style (CentOS 7)
+        try:
+            plt.style.use('dark_background')
+            self._total_dBm_color = 'white'
+        except:
+            self._total_dBm_color = 'black'
+
+        mpl.rcParams['toolbar'] = 'None'
+        if 'axes.titlepad' in mpl.rcParams:
+            mpl.rcParams['axes.titlepad'] = 20
+
+        # older matplotlib does not have viridis (CentOS 7)
+        plt.rcParams['image.cmap'] = 'viridis' if 'viridis' in plt.colormaps() else 'YlGnBu_r'
+        plt.rc('axes', labelsize=10)
+        plt.rc('xtick', labelsize=8)
+        plt.rc('xtick', labelsize=8)
+        plt.rc('ytick', labelsize=8)
+        plt.rc('legend', fontsize=7)
+        self._fig = plt.gcf()
+
+        main_grid = gridspec.GridSpec(1 + self._with_waveforms,1)
+        main_grid.update(hspace=.7)
+
+        top_cell = main_grid[0,0]
+
+        gs1 = gridspec.GridSpecFromSubplotSpec(2,1, top_cell,hspace=0.05)
+
+        self._ax_total = plt.subplot(gs1[0])
+        self._ax_total_w = plt.subplot(gs1[1])
+
+        self._ax_total.set_title('Total Energy')
+        self._ax_total.set_ylabel('dBm',fontsize=8)
+        self._ax_total.xaxis.set_major_formatter(EngFormatter())
+        self._ax_total.get_xaxis().set_ticks_position('top')
+        self._ax_total.set_xlim(hz_min,hz_max)
+
+        self._ax_total_w.get_yaxis().set_visible(False)
+        self._ax_total_w.get_xaxis().set_ticks_position('none')
+        self._ax_total_w.set_xticklabels([])
+        self._ax_total_w.set_xlabel('Frequency (Hz)',fontsize=8)
+        self._ax_total_w.spines['right'].set_visible(False)
+        self._ax_total_w.spines['left'].set_visible(False)
+        self._ax_total_w.spines['top'].set_visible(False)
+
+        if self._with_grid:
+            self._ax_total.grid(which='major',
+                                color='grey',
+                                linestyle='-')
+
+        if self._with_waveforms:
+            bottom_cell = main_grid[1,0]
+
+            gs2 = gridspec.GridSpecFromSubplotSpec(2,
+                                                   1,
+                                                   bottom_cell,
+                                                   hspace=0.05)
+
+            self._ax_wf = plt.subplot(gs2[0])
+            self._ax_wf_w = plt.subplot(gs2[1])
+
+            self._ax_wf.set_title('Waveform Energy')
+            self._ax_wf.set_ylabel('dBm',fontsize=8)
+            self._ax_wf.xaxis.set_major_formatter(EngFormatter())
+            self._ax_wf.get_xaxis().set_ticks_position('top')
+            self._ax_wf.set_xlim(hz_min,hz_max)
+
+            self._ax_wf_w.get_yaxis().set_visible(False)
+            self._ax_wf_w.get_xaxis().set_ticks_position('none')
+            self._ax_wf_w.set_xticklabels([])
+            self._ax_wf_w.set_xlabel('Frequency (Hz)',fontsize=8)
+            self._ax_wf_w.spines['right'].set_visible(False)
+            self._ax_wf_w.spines['left'].set_visible(False)
+            self._ax_wf_w.spines['top'].set_visible(False)
+            self._ax_wf_w.set_xlabel('Frequency (Hz)\n<Press \'w\' to toggle>',fontsize=8)
+
+            if self._with_grid:
+                self._ax_wf.grid(which='major',
+                                 color='grey',
+                                 linestyle='-')
+
+            def press(event):
+                if event.key == 'w':
+                    self._subid_wf_select = next(self._cycle_subid)
+                    if self._subid_wf_select in self._subid_name_map:
+                        self._ax_wf_w.set_xlabel('Frequency (Hz)\n{}'.format(self._subid_name_map[self._subid_wf_select]),
+                                                 fontsize=8)
+                    else:
+                        self._ax_wf_w.set_xlabel('Frequency (Hz)\n<Press \'w\' to toggle>',
+                                                 fontsize=8)
+
+                    self._ax_wf_w.figure.canvas.draw()
+
+            self._fig.canvas.mpl_connect('key_press_event', press)
+
+
+        self._fig.canvas.set_window_title('EMANE Spectrum Analyzer [{}]'.format(endpoint))
+
+
+    def _create_df(self,timestamp,receiver_sensitivity_dBm,subid_info,subid_wf_select,store):
+        subids = set()
+
+        model = defaultdict(lambda : defaultdict(lambda : receiver_sensitivity_dBm))
+
+        for frequency_hz in store[timestamp]:
+            for subid in store[timestamp][frequency_hz]:
+                subids.add(subid)
+                num_steps = subid_info[subid].bandwidth_hz // self._hz_step
+
+                energy_dBm = max(store[timestamp][frequency_hz][subid])
+
+                for i in range(0,num_steps+1):
+                    bandwidth_frequency_hz = (frequency_hz - subid_info[subid].bandwidth_hz // 2) + i * self._hz_step
+                    if bandwidth_frequency_hz >= self._min_freq_hz and bandwidth_frequency_hz <= self._max_freq_hz:
+                        model[bandwidth_frequency_hz][subid] = energy_dBm
+
+        # fill any missing subids with receiver sensitivity
+        for subid in set(subid_info.keys()) - subids:
+            for frequency_hz in store[timestamp]:
+                num_steps = subid_info[subid].bandwidth_hz // self._hz_step
+
+                for i in range(0,num_steps+1):
+                    bandwidth_frequency_hz = (frequency_hz - subid_info[subid].bandwidth_hz // 2) + i * self._hz_step
+                    if bandwidth_frequency_hz >= self._min_freq_hz and bandwidth_frequency_hz <= self._max_freq_hz:
+                        model[bandwidth_frequency_hz][subid] = receiver_sensitivity_dBm
+
+            subids.add(subid)
+
+        df_data = defaultdict(list)
+
+        for frequency_hz in self._freq_values:
+            df_data['Frequency'].append(frequency_hz)
+
+        freq_bins = defaultdict(lambda : receiver_sensitivity_dBm)
+
+        for subid in sorted(subids):
+            freq_bins.clear()
+
+            for frequency_hz in model:
+                bin_frequency_hz = (frequency_hz // self._hz_step) * self._hz_step
+                freq_bins[bin_frequency_hz] = max(freq_bins[bin_frequency_hz],
+                                                  model[frequency_hz][subid])
+
+            for frequency_hz in self._freq_values:
+                df_data[subid].append(freq_bins[frequency_hz])
+
+        df = pd.DataFrame.from_dict(df_data)
+
+        # convert to mW, removing noise floor only
+        keys_mW = []
+        for subid in subids:
+            key_mW = '{}_mW'.format(subid)
+            key_dBm = '{}_dBm'.format(subid)
+            # remove any noise only measurements
+            df[key_dBm] = np.where(np.isclose(df[subid],receiver_sensitivity_dBm), np.nan, df[subid])
+            # convert to mW
+            df[key_mW] = np.power(10,df[key_dBm]/10)
+            keys_mW.append(key_mW)
+
+        # sum all subid energy in mW
+        df['Total_mW'] = df.loc[:,keys_mW].sum(axis=1,skipna=True)
+
+        # pandas >= 0.22.0: Sum of an all-NA or empty Series is 0,
+        # fill NA for older versions
+        df['Total_mW'].fillna(0,inplace=True)
+
+        # convert to dBm
+        np.seterr(divide = 'ignore')
+        df['Total_dBm'] = np.where(df['Total_mW'] == 0,receiver_sensitivity_dBm, 10.0 * np.log10(df['Total_mW']))
+        np.seterr(divide = 'warn')
+
+        for frequency_hz,total_dBm in zip(self._freq_values,df['Total_dBm']):
+            self._waterfall_total[frequency_hz].appendleft(total_dBm)
+
+        total_dBm_df = pd.DataFrame.from_dict(self._waterfall_total)
+
+        subid_wf_df = pd.DataFrame()
+
+        if self._with_waveforms:
+            # calculate the energy and noise relative to each subid
+            for subid in subids:
+                key_mW = '{}_mW'.format(subid)
+                key_dBm = '{}_dBm'.format(subid)
+                noise_key_mW = 'Noise_mW_{}'.format(subid)
+                noise_key_dB = 'Noise_dB_{}'.format(subid)
+
+                df[noise_key_mW] = np.where(np.isnan(df[key_dBm]),
+                                            df['Total_mW'],
+                                            df['Total_mW'] - df[key_mW])
+
+                np.seterr(divide = 'ignore')
+                df[noise_key_dB] = np.where(df[noise_key_mW] == 0,
+                                            receiver_sensitivity_dBm,
+                                            10.0 * np.log10(df[noise_key_mW]))
+                np.seterr(divide = 'warn')
+
+                #df['Waveform_dBm_{}'.format(subid)] = np.where(np.isnan(df[key_dBm]),
+                #                                               df[noise_key_dB],
+                #                                               df[key_dBm])
+
+
+                df['{}_dBm'.format(subid)].fillna(receiver_sensitivity_dBm,inplace=True)
+
+            for subid in subids:
+                #waveform_key = 'Waveform_dBm_{}'.format(subid)
+                waveform_key = '{}_dBm'.format(subid)
+                for frequency_hz,waveform_dBm in zip(self._freq_values,df[waveform_key]):
+                    self._waterfall_subid_wf[subid][frequency_hz].appendleft(waveform_dBm)
+
+            if subid_wf_select in self._waterfall_subid_wf:
+                subid_wf_df = pd.DataFrame.from_dict(self._waterfall_subid_wf[subid_wf_select])
+
+            if not self._subids.issuperset(subids):
+                self._subids = self._subids.union(subids)
+                self._cycle_subid = cycle(list(self._subids) + [None])
+
+
+
+        return df,total_dBm_df,subid_wf_df
+
+
+    def _update(self, y):
+        artists = []
+
+        try:
+            (timestamp,
+             sequence,
+             receiver_sensitivity_dBm,
+             subid_info,
+             store) = self._stream.data()
+
+            if self._last_sequence != sequence:
+                if self._last_sequence != None and sequence != self._last_sequence + 1:
+                    if not self._alert:
+                        self._ax_total_w.set_xlabel('Frequency (Hz)\n(!)',fontsize=8)
+                        self._ax_total_w.figure.canvas.draw()
+                        self._alert = True
+
+                elif self._alert:
+                    self._ax_total_w.set_xlabel('Frequency (Hz)',fontsize=8)
+                    self._ax_total_w.figure.canvas.draw()
+                    self._alert = False
+
+                self._last_sequence = sequence
+
+                df,df2,df3 = self._create_df(timestamp,
+                                             receiver_sensitivity_dBm,
+                                             subid_info,
+                                             self._subid_wf_select,
+                                             store)
+
+                reset_ax_lim = False
+
+                if self._line_total == None:
+                    self._line_total = self._ax_total.plot([],
+                                                           [],
+                                                           animated=True,
+                                                           color=self._total_dBm_color)[0]
+
+                self._line_total.set_data(df['Frequency'],
+                                          df['Total_dBm'])
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+
+                    # older numpy always return array, newer return scalar
+                    min_val = np.nanmin(df['Total_dBm'])
+
+                    if type(min_val) is not np.float64:
+                        min_val = min(min_val)
+
+                    if np.isnan(self._min_y_total) or self._min_y_total > min_val:
+                        self._min_y_total = np.floor(min_val / 5) * 5 - 5
+                        reset_ax_lim = not np.isnan(self._min_y_total)
+
+                    # older numpy always return array, newer return scalar
+                    max_val = np.nanmax(df['Total_dBm'])
+
+                    if type(max_val) is not np.float64:
+                        max_val = max(max_val)
+
+                    if np.isnan(self._max_y_total) or self._max_y_total < max_val:
+                        self._max_y_total = np.ceil(max_val / 5) * 5 + 5
+                        reset_ax_lim = not np.isnan(self._max_y_total)
+
+                reset_total_norm = False
+
+                if reset_ax_lim:
+                    reset_total_norm = True
+                    self._ax_total.set_ylim(self._min_y_total,self._max_y_total)
+                    self._ax_total.figure.canvas.draw()
+
+                artists.append(self._line_total)
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', r'converting a masked element to nan.')
+                    if self._wfall_total == None:
+                        reset_total_norm = True
+                        self._wfall_total = self._ax_total_w.imshow(df2.values,
+                                                                    animated=True,
+                                                                    interpolation='gaussian',
+                                                                    aspect='auto',
+                                                                    origin='upper')
+                    else:
+                        self._wfall_total.set_data(df2.values)
+
+                    if reset_total_norm:
+                        norm = colors.Normalize(vmin=self._min_y_total,
+                                                vmax=self._max_y_total)
+                        self._wfall_total.set_norm(norm)
+
+                artists.append(self._wfall_total)
+
+                if self._with_waveforms:
+                    # update the per subid spectrum view
+                    reset_ax_lim = False
+
+                    if 'Noise' not in self._lines:
+                        self._lines['Noise'] = self._ax_wf.plot([],
+                                                                [],
+                                                                label='Noise',
+                                                                animated=True)[0]
+                    for subid in subid_info:
+                        if subid not in self._lines:
+                            if subid not in self._subid_name_map:
+                                self._subid_name_map[subid] = 'subid {}'.format(subid)
+
+                            self._lines[subid] = self._ax_wf.plot([],
+                                                                  [],
+                                                                  label=self._subid_name_map[subid],
+                                                                  animated=True)[0]
+                            self._ax_wf.legend(loc=1)
+                            self._ax_wf.figure.canvas.draw()
+
+                        if self._subid_wf_select == None:
+                            self._lines[subid].set_visible(True)
+                        else:
+                            if subid == self._subid_wf_select:
+                                self._lines[subid].set_visible(True)
+                            else:
+                                self._lines[subid].set_visible(False)
+
+                        self._lines[subid].set_data(df['Frequency'],
+                                                    df['{}_dBm'.format(subid)].fillna(receiver_sensitivity_dBm))
+
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+                            #min_val = np.nanmin(df['Waveform_dBm_{}'.format(subid)])
+
+                            # older numpy always return array, newer return scalar
+                            min_val = np.nanmin(df['{}_dBm'.format(subid)])
+
+                            if type(min_val) is not np.float64:
+                                min_val = min(min_val)
+
+                            if np.isnan(self._min_y_wf) or self._min_y_wf > min_val:
+                                self._min_y_wf = np.floor(min_val / 5) * 5 - 5
+                                reset_ax_lim = not np.isnan(self._min_y_wf)
+
+                            #max_val = np.nanmax(df['Waveform_dBm_{}'.format(subid)])
+
+                            # older numpy always return array, newer return scalar
+                            max_val = np.nanmax(df['{}_dBm'.format(subid)])
+
+                            if type(max_val) is not np.float64:
+                                max_val = max(max_val)
+
+                            if np.isnan(self._max_y_wf) or self._max_y_wf < max_val:
+                                self._max_y_wf = np.ceil(max_val / 5) * 5 + 5
+                                reset_ax_lim = not np.isnan(self._max_y_wf)
+
+                    if self._subid_wf_select == None:
+                        self._lines['Noise'].set_visible(False)
+                    else:
+                        self._lines['Noise'].set_data(df['Frequency'],
+                                                      df['Noise_dB_{}'.format(self._subid_wf_select)].fillna(receiver_sensitivity_dBm))
+                        self._lines['Noise'].set_visible(True)
+
+                    if reset_ax_lim:
+                        self._ax_wf.set_ylim(self._min_y_wf,self._max_y_wf)
+                        self._ax_wf.figure.canvas.draw()
+
+                    artists.extend([x for x in list(self._lines.values())])
+
+                    reset_wfall_wf_norm = False
+
+                    if reset_ax_lim:
+                        reset_wfall_wf_norm = True
+                        self._ax_wf.set_ylim(self._min_y_wf,self._max_y_wf)
+                        self._ax_wf.figure.canvas.draw()
+
+                    artists.extend([x for x in list(self._lines_wf.values())])
+
+                    if not df3.empty:
+                        if self._wfall_wf == None:
+                            reset_wfall_wf_norm = True
+                            self._wfall_wf = self._ax_wf_w.imshow(df3.values,
+                                                                  animated=True,
+                                                                  interpolation='gaussian',
+                                                                  aspect='auto',
+                                                                  origin='upper')
+                        else:
+                            self._wfall_wf.set_data(df3.values)
+
+                        if reset_wfall_wf_norm:
+                            norm = colors.Normalize(vmin=self._min_y_wf,
+                                                    vmax=self._max_y_wf)
+                            self._wfall_wf.set_norm(norm)
+
+                        artists.append(self._wfall_wf)
+
+                    elif self._wfall_wf != None:
+                        self._wfall_wf.remove()
+                        self._wfall_wf = None
+
+        except:
+            print(traceback.print_exc(),
+                  file=sys.stderr)
+
+        return artists
+
+    def run(self):
+        ani = animation.FuncAnimation(self._fig,
+                                      self._update,
+                                      init_func=lambda : [],
+                                      interval=10,
+                                      blit=True)
+        plt.show()
+
+argument_parser = ArgumentParser()
+
+argument_parser.add_argument('endpoint',
+                             type=str,
+                             help='signal energy subscribe endpoint')
+
+argument_parser.add_argument('--hz-min',
+                             default=2000000000,
+                             type=int,
+                             help='minimum Hz axis limit [default: %(default)s]')
+
+argument_parser.add_argument('--hz-max',
+                             default=4000000000,
+                             type=int,
+                             help='maximum Hz axis limit [default: %(default)s]')
+
+argument_parser.add_argument('--hz-step',
+                             default=1000000,
+                             type=int,
+                             help='display bin size in hz [default: %(default)s]')
+
+argument_parser.add_argument('--with-grid',
+                             action='store_true',
+                             help='display plot gids')
+
+argument_parser.add_argument('--with-waveforms',
+                             action='store_true',
+                             help='show per waveform energy view')
+
+argument_parser.add_argument('--subid-name',
+                             type=str,
+                             action='append',
+                             help='subid name mapping: <id>,<name>')
+
+ns = argument_parser.parse_args()
+
+args = vars(ns)
+
+subid_name_map = {}
+
+if args['subid_name']:
+    for item in args['subid_name']:
+        m = re.match(r'(\d+),(.+)',item)
+
+        if m:
+            subid_name_map[int(m.group(1))] = m.group(2)
+        else:
+            print('invalid subid-name value: {}'.format(item),
+                  file=sys.stderr)
+            exit(1)
+
+def do_main():
+    stream = SpectrumEnergyStreamer(args['endpoint'])
+
+    scope = SpectrumAnalyzer(stream,
+                             args['endpoint'],
+                             args['hz_min'],
+                             args['hz_max'],
+                             args['hz_step'],
+                             args['with_waveforms'],
+                             args['with_grid'],
+                             subid_name_map)
+
+    stream.run()
+
+    scope.run()
+
+    stream.stop()
+
+
+
+# avoid DaemonContext with older daemon (CentOS 7)
+try:
+    v = daemon.version.version
+    do_main()
+except:
+    with daemon.DaemonContext(stdout=sys.stdout,
+                              stderr=sys.stderr):
+        try:
+            do_main()
+        except:
+            print(traceback.format_exc(),
+                  file=sys.stderr)

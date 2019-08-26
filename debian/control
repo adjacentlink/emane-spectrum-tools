@@ -1,0 +1,25 @@
+Source: emane-spectrum-tools
+Section: unknown
+Priority: extra
+Maintainer: Adjacent Link LLC <labs@adjacentlink.com>
+Build-Depends: debhelper (>= 10), dh-python
+Standards-Version: 3.9.3
+Homepage: https://github.com/adjacentlink/emane-spectrum-tools
+
+Package: emane-spectrum-tools
+Section: net
+Architecture: any
+Depends:  ${misc:Depends}, ${shlibs:Depends}, emane-libs
+Description: EMANE Spectrum Tools
+
+Package: python-emane-spectrum-tools
+Section: python
+Architecture: all
+Depends: ${python:Depends}, ${misc:Depends}
+Description: EMANE Spectrum Tools
+
+Package: python3-emane-spectrum-tools
+Section: python
+Architecture: all
+Depends: ${python3:Depends}, ${misc:Depends}
+Description: EMANE Spectrum Tools
