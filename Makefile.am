@@ -58,6 +58,7 @@ endif
 if HAVE_DEB
 
 deb: dist-gzip
+	rm -rf .debbuild
 	mkdir -p .debbuild
 	cp -f $(PACKAGE)-$(VERSION).tar.gz .debbuild
 	cd .debbuild && tar xzf $(PACKAGE)-$(VERSION).tar.gz

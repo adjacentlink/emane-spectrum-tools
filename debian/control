@@ -2,7 +2,7 @@ Source: emane-spectrum-tools
 Section: unknown
 Priority: extra
 Maintainer: Adjacent Link LLC <labs@adjacentlink.com>
-Build-Depends: debhelper (>= 10), dh-python
+Build-Depends: debhelper (>= 9), dh-python
 Standards-Version: 3.9.3
 Homepage: https://github.com/adjacentlink/emane-spectrum-tools
 
