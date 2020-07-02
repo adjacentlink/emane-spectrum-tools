@@ -832,7 +832,6 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
               iNewTxFrequencies += std::get<1>(iter->second).count(segment.getFrequencyHz()) == 0;
             }
 
-
           if(!iNewTxFrequencies)
             {
               // not really out of band, it is all in band with no
@@ -846,7 +845,8 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                                 rxPowerSegments,
                                                 false,
                                                 transmitters,
-                                                commonPHYHeader.getSubId());
+                                                commonPHYHeader.getSubId(),
+                                                {});
             }
           else
             {
@@ -865,7 +865,8 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                                     maxMessagePropagation_,
                                                     maxSegmentDuration_,
                                                     timeSyncThreshold_,
-                                                    bNoiseMaxClamp_);
+                                                    bNoiseMaxClamp_,
+                                                    true);
             }
         }
       catch(SpectrumServiceException & exp)
