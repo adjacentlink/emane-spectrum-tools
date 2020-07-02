@@ -832,7 +832,6 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
               iNewTxFrequencies += std::get<1>(iter->second).count(segment.getFrequencyHz()) == 0;
             }
 
-
           if(!iNewTxFrequencies)
             {
               // not really out of band, it is all in band with no
@@ -845,7 +844,9 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                                 commonPHYHeader.getBandwidthHz(),
                                                 rxPowerSegments,
                                                 false,
-                                                transmitters);
+                                                transmitters,
+                                                commonPHYHeader.getSubId(),
+                                                {});
             }
           else
             {
@@ -854,7 +855,8 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                                txFrequencies.end());
 
               //re-intialize with new freq set
-              std::get<2>(iter->second)->initialize(std::get<1>(iter->second),
+              std::get<2>(iter->second)->initialize(0,
+                                                    std::get<1>(iter->second),
                                                     u64BandwidthHz_,
                                                     Utils::DB_TO_MILLIWATT(dReceiverSensitivitydBm_),
                                                     SpectrumMonitor::NoiseMode::OUTOFBAND,
@@ -863,7 +865,8 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                                     maxMessagePropagation_,
                                                     maxSegmentDuration_,
                                                     timeSyncThreshold_,
-                                                    bNoiseMaxClamp_);
+                                                    bNoiseMaxClamp_,
+                                                    true);
             }
         }
       catch(SpectrumServiceException & exp)
