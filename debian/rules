@@ -3,22 +3,12 @@
 export DH_OPTIONS
 
 PYTHON3_DEPENDS = -Vpython3:Depends="python3:any (>= 3.0), python3, python3-pkg-resources, python3-matplotlib, python3-numpy, python3-pandas, python3-zmq, python3-protobuf, python3-daemon"
-PYTHON_DEPENDS = -Vpython:Depends="python:any (<< 2.8), python:any (>= 2.7), python, python-pkg-resources, python-matplotlib, python-numpy, python-pandas, python-zmq, python-protobuf, python-daemon"
-PYTHON2_VERSION:=$(shell python2 2>&1 --version | awk '{split($$2,v,"."); printf("%d.%d",v[1],v[2]);}')
-PYTHON3_VERSION:=$(shell python3 2>&1 --version | awk '{split($$2,v,"."); printf("%d.%d",v[1],v[2]);}')
 
 override_dh_gencontrol:
-	dh_gencontrol -- $(PYTHON_DEPENDS) $(PYTHON3_DEPENDS)
+	dh_gencontrol -- $(PYTHON3_DEPENDS)
 
 override_dh_auto_install:
 	dh_auto_install -- PYTHON=python3
-	mv debian/tmp/usr/bin/emane-spectrum-analyzer debian/tmp/usr/bin/emane-spectrum-analyzer-$(PYTHON3_VERSION)
-	cd debian/tmp/usr/bin; ln -s emane-spectrum-analyzer-$(PYTHON3_VERSION) emane-spectrum-analyzer-3
-	dh_auto_install -- PYTHON=python2
-	mv debian/tmp/usr/bin/emane-spectrum-analyzer debian/tmp/usr/bin/emane-spectrum-analyzer-$(PYTHON2_VERSION)
-	cd debian/tmp/usr/bin; ln -s emane-spectrum-analyzer-$(PYTHON2_VERSION) emane-spectrum-analyzer-2
-	cd debian/tmp/usr/bin; ln -s emane-spectrum-analyzer-2 emane-spectrum-analyzer
-
 %:
-	dh  $@ --with python2,python3
+	dh  $@ --with python3
 

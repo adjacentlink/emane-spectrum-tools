@@ -12,12 +12,6 @@ Architecture: any
 Depends:  ${misc:Depends}, ${shlibs:Depends}, emane-libs
 Description: EMANE Spectrum Tools
 
-Package: python-emane-spectrum-tools
-Section: python
-Architecture: all
-Depends: ${python:Depends}, ${misc:Depends}
-Description: EMANE Spectrum Tools
-
 Package: python3-emane-spectrum-tools
 Section: python
 Architecture: all
