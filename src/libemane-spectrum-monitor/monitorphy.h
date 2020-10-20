@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014,2016-2017,2019 - Adjacent Link LLC,
+ * Copyright (c) 2013-2014,2016-2017,2019-2020 - Adjacent Link LLC,
  * Bridgewater, New Jersey
  * All rights reserved.
  *
@@ -49,6 +49,7 @@
 #include <set>
 #include <cstdint>
 #include <memory>
+#include <fstream>
 
 namespace EMANE
 {
@@ -128,6 +129,8 @@ namespace EMANE
       void * pZMQContext_;
       void * pZMQSocket_;
       std::uint64_t u64SequenceNumber_;
+      std::string sSpectrumQueryRecorderFile_;
+      std::fstream recorderFileStream_;
 
       void querySpectrumService();
 

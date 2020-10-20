@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014,2016-2017,2019 - Adjacent Link LLC,
+ * Copyright (c) 2013-2014,2016-2017,2019-2020 - Adjacent Link LLC,
  * Bridgewater, New Jersey
  * All rights reserved.
  *
@@ -215,7 +215,12 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
   configRegistrar.registerNonNumeric<INETAddr>("spectrumquery.publishendpoint",
                                                ConfigurationProperties::DEFAULT,
                                                {INETAddr{"0.0.0.0",8883}},
-                                               "Spectrum Query ZMQ Pub socket endpoint.");
+                                               "Spectrum query ZMQ Pub socket endpoint.");
+
+  configRegistrar.registerNonNumeric<std::string>("spectrumquery.recorderfile",
+                                                  ConfigurationProperties::NONE,
+                                                  {},
+                                                  "Spectrum query measurement recorder file.");
 
   auto & eventRegistrar = registrar.eventRegistrar();
 
@@ -431,6 +436,18 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
                                   item.first.c_str(),
                                   spectrumQueryPublishAddr_.str().c_str());
         }
+      else if(item.first == "spectrumquery.recorderfile")
+        {
+          sSpectrumQueryRecorderFile_ = item.second[0].asString();
+
+          LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
+                                  INFO_LEVEL,
+                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %s",
+                                  id_,
+                                  __func__,
+                                  item.first.c_str(),
+                                  sSpectrumQueryRecorderFile_.c_str());
+        }
       else
         {
           if(!item.first.compare(0,FADINGMANAGER_PREFIX.size(),FADINGMANAGER_PREFIX))
@@ -493,6 +510,18 @@ void EMANE::SpectrumTools::MonitorPhy::start()
     }
 
 
+  if(!sSpectrumQueryRecorderFile_.empty())
+    {
+      recorderFileStream_.open(sSpectrumQueryRecorderFile_,
+                               std::fstream::out | std::fstream::trunc);
+
+      if(!recorderFileStream_)
+        {
+          throw makeException<StartException>("Unable to open: %s",
+                                              sSpectrumQueryRecorderFile_.c_str());
+        }
+    }
+
   querySpectrumService();
 }
 
@@ -503,6 +532,11 @@ void EMANE::SpectrumTools::MonitorPhy::stop()
                           "PHYI %03hu SpectrumTools::MonitorPhy::%s",
                           id_,
                           __func__);
+
+  if(recorderFileStream_.is_open())
+    {
+      recorderFileStream_.close();
+    }
 
   if(pZMQSocket_)
     {
@@ -1051,6 +1085,16 @@ void EMANE::SpectrumTools::MonitorPhy::querySpectrumService()
                                       id_,
                                       __func__,
                                       zmq_strerror(errno));
+            }
+
+          if(recorderFileStream_.is_open())
+            {
+             std::uint32_t u32MessageFrameLength = htonl(sSerialization.length());
+
+             recorderFileStream_.write(reinterpret_cast<char *>(&u32MessageFrameLength),
+                                       sizeof(u32MessageFrameLength));
+
+             recorderFileStream_.write(sSerialization.c_str(),sSerialization.length());
             }
         }
 
