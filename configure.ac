@@ -32,7 +32,7 @@ AC_COPYRIGHT([
  See toplevel COPYING for more information.
 ])
 
-AC_INIT([emane-spectrum-tools],0.2.3,[labs at adjacentlink dot com])
+AC_INIT([emane-spectrum-tools],0.2.4,[labs at adjacentlink dot com])
 
 AC_CONFIG_MACRO_DIR([m4])
 
