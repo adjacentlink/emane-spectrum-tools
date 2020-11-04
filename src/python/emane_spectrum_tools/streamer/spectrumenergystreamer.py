@@ -36,6 +36,7 @@ import zmq
 import threading
 import traceback
 import copy
+import numpy as np
 from collections import namedtuple
 from collections import defaultdict
 
@@ -48,13 +49,12 @@ class SpectrumEnergyStreamer(object):
     def __init__(self,endpoint):
         self._endpoint = endpoint
         self._cancel_event = threading.Event()
-        self._store = {}
-        self._timestamp_start = 0
-        self._sequence = 0
+
         self._receiver_sensitivity_dBm = 0
-        self._record_length_seconds = 60
         self._subid_info = defaultdict(lambda : SpectrumEnergyStreamer.SubIdInfo(0))
         self._lock = threading.Lock()
+        self._first = True
+        self._store = defaultdict(lambda : defaultdict(lambda : 0))
 
     def run(self):
         thread = threading.Thread(target=self._run)
@@ -100,40 +100,58 @@ class SpectrumEnergyStreamer(object):
 
         measurement.ParseFromString(serialized_measurement)
 
-        store = defaultdict(lambda : defaultdict(lambda : measurement.receiver_sensitivity_dBm))
-
         subid_bandwidth_map = {}
+
+        self._lock.acquire()
+
+        if self._first:
+            self._receiver_sensitivity_dBm = measurement.receiver_sensitivity_dBm
+            self._first = False
 
         for entry in measurement.entries:
             subid_bandwidth_map[entry.subid] = entry.bandwidth_hz
 
             for energy in entry.energies:
-                store[energy.frequency_hz][entry.subid] = energy.energy_dBm
 
-        self._lock.acquire()
+                energy_dBm = max(energy.energy_dBm)
 
-        if len(self._store) * measurement.duration >= self._record_length_seconds:
-            del self._store[min(self._store.keys())]
+                if np.isclose(energy_dBm,measurement.receiver_sensitivity_dBm):
+                    energy_mW = 0
+                else:
+                    energy_mW = np.power(10,energy_dBm/10.0)
+
+                self._store[energy.frequency_hz][entry.subid] = max(self._store[energy.frequency_hz][entry.subid],
+                                                                    energy_mW)
 
         for subid,bandwidth_hz in list(subid_bandwidth_map.items()):
             if self._subid_info[subid].bandwidth_hz != bandwidth_hz:
                 self._subid_info[subid] = self._subid_info[subid]._replace(bandwidth_hz=bandwidth_hz)
 
-        self._store[measurement.start_time] = store
-        self._timestamp_start = measurement.start_time
-        self._receiver_sensitivity_dBm = measurement.receiver_sensitivity_dBm
-        self._sequence = measurement.sequence
         self._lock.release()
 
-
     def data(self):
+        store_dBm = defaultdict(lambda : defaultdict(lambda :  self._receiver_sensitivity_dBm))
+
         self._lock.acquire()
 
-        ret = (self._timestamp_start,
-               self._sequence,
+        # convert totals to dBm
+        for freq in self._store:
+            for subid in self._store[freq]:
+                energy_dBm = self._receiver_sensitivity_dBm
+
+                if self._store[freq][subid] > 0:
+                    energy_dBm = 10.0 * np.log10(self._store[freq][subid])
+
+                store_dBm[freq][subid] = energy_dBm
+
+        ret = (0,
+               0,
                self._receiver_sensitivity_dBm,
                copy.copy(self._subid_info),
-               copy.copy(self._store))
+               store_dBm)
+
+        self._store.clear()
+
         self._lock.release()
 
         return ret

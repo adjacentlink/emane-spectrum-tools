@@ -200,12 +200,12 @@ class SpectrumAnalyzer(object):
 
         model = defaultdict(lambda : defaultdict(lambda : receiver_sensitivity_dBm))
 
-        for frequency_hz in store[timestamp]:
-            for subid in store[timestamp][frequency_hz]:
+        for frequency_hz in store:
+            for subid in store[frequency_hz]:
                 subids.add(subid)
                 num_steps = subid_info[subid].bandwidth_hz // self._hz_step
 
-                energy_dBm = max(store[timestamp][frequency_hz][subid])
+                energy_dBm = store[frequency_hz][subid]
 
                 for i in range(0,num_steps+1):
                     bandwidth_frequency_hz = (frequency_hz - subid_info[subid].bandwidth_hz // 2) + i * self._hz_step
@@ -214,7 +214,7 @@ class SpectrumAnalyzer(object):
 
         # fill any missing subids with receiver sensitivity
         for subid in set(subid_info.keys()) - subids:
-            for frequency_hz in store[timestamp]:
+            for frequency_hz in store:
                 num_steps = subid_info[subid].bandwidth_hz // self._hz_step
 
                 for i in range(0,num_steps+1):
@@ -327,17 +327,18 @@ class SpectrumAnalyzer(object):
              subid_info,
              store) = self._stream.data()
 
-            if self._last_sequence != sequence:
-                if self._last_sequence != None and sequence != self._last_sequence + 1:
-                    if not self._alert:
-                        self._ax_total_w.set_xlabel('Frequency (Hz)\n(!)',fontsize=8)
-                        self._ax_total_w.figure.canvas.draw()
-                        self._alert = True
+            if store:
+                # self._last_sequence != sequence:
+                # if self._last_sequence != None and sequence != self._last_sequence + 1:
+                #     if not self._alert:
+                #         self._ax_total_w.set_xlabel('Frequency (Hz)\n(!)',fontsize=8)
+                #         self._ax_total_w.figure.canvas.draw()
+                #         self._alert = True
 
-                elif self._alert:
-                    self._ax_total_w.set_xlabel('Frequency (Hz)',fontsize=8)
-                    self._ax_total_w.figure.canvas.draw()
-                    self._alert = False
+                # elif self._alert:
+                #     self._ax_total_w.set_xlabel('Frequency (Hz)',fontsize=8)
+                #     self._ax_total_w.figure.canvas.draw()
+                #     self._alert = False
 
                 self._last_sequence = sequence
 

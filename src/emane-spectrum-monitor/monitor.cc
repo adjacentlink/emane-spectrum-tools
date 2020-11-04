@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 - Adjacent Link LLC, Bridgewater, New Jersey
+ * Copyright (c) 2018-2020 - Adjacent Link LLC, Bridgewater, New Jersey
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -107,6 +107,8 @@ int main(int argc, char* argv[])
          {"timesyncthreshold", 1, nullptr, 1},
          {"spectrumquery.binsize", 1, nullptr, 1},
          {"spectrumquery.rate", 1, nullptr, 1},
+         {"spectrumquery.publishendpoint", 1, nullptr, 1},
+         {"spectrumquery.recorderfile", 1, nullptr, 1},
          {"antennaprofilemanifesturi", 1, nullptr, 5},
          {"controlportendpoint", 1, nullptr, 5},
          {"eventservicedevice", 1, nullptr, 5},
@@ -196,6 +198,7 @@ int main(int argc, char* argv[])
               std::cout<<"  --spectrumquery.binsize VALUE   default: 10000 microseconds"<<std::endl;
               std::cout<<"  --spectrumquery.publishendpoint VALUE default: 0.0.0.0:8883"<<std::endl;
               std::cout<<"  --spectrumquery.rate VALUE      default: 100000 microseconds"<<std::endl;
+              std::cout<<"  --spectrumquery.recorderfile VALUE  optional"<<std::endl;
               std::cout<<std::endl;
               std::cout<<"EMANE Physical Layer config:"<<std::endl;
               std::cout<<"  --bandwidth VALUE **"<<std::endl;
