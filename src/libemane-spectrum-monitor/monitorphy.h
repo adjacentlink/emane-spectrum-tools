@@ -31,15 +31,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef EMANE_SPECTRUMTOOLS_MONITORPHY_HEADER_
-#define EMANE_SPECTRUMTOOLS_MONITORPHY_HEADER_
+#ifndef EMANESPECTRUMTOOLSMONITORPHY_HEADER_
+#define EMANESPECTRUMTOOLSMONITORPHY_HEADER_
 
 #include "emane/phylayerimpl.h"
 #include "emane/phytypes.h"
 #include "emane/utils/commonlayerstatistics.h"
 
 #include "locationmanager.h"
-#include "spectrummonitor.h"
+#include "spectrummonitoralt.h"
 #include "gainmanager.h"
 #include "propagationmodelalgorithm.h"
 #include "eventtablepublisher.h"
@@ -93,14 +93,9 @@ namespace EMANE
                         const Serialization & serialization) override;
 
 
-      SpectrumMonitor & getSpectrumMonitor();
-
     private:
       GainManager gainManager_;
       LocationManager locationManager_;
-      std::uint64_t u64BandwidthHz_;
-      double dReceiverSensitivitydBm_;
-      SpectrumMonitor::NoiseMode noiseMode_;
       std::pair<double,bool> optionalFixedAntennaGaindBi_;
       std::unique_ptr<PropagationModelAlgorithm> pPropagationModelAlgorithm_;
       Utils::CommonLayerStatistics commonLayerStatistics_;
@@ -116,9 +111,8 @@ namespace EMANE
       StatisticNumeric<std::uint64_t> * pTimeSyncThresholdRewrite_;
       FadingManager fadingManager_;
       using SpectrumMap = std::map<std::uint16_t, // sub id
-                                   std::tuple<std::uint64_t, // bandwidth
-                                              FrequencySet, // tx frequencies
-                                              std::unique_ptr<SpectrumMonitor>>>;
+                                   std::tuple<std::uint64_t, // bandwidth hz
+                                              std::unique_ptr<SpectrumMonitorAlt>>>;
 
       SpectrumMap spectrumMap_;
       Microseconds spectrumQueryRate_;
@@ -140,4 +134,4 @@ namespace EMANE
     };
   }
 }
-#endif // EMANESPECTRUMMONITORPHY_HEADER_
+#endif // EMANESPECTRUMTOOLSMONITORPHY_HEADER_

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2018 - Adjacent Link LLC, Bridgewater, New Jersey
+# Copyright (c) 2018,2020 - Adjacent Link LLC, Bridgewater, New Jersey
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -63,12 +63,14 @@ class SpectrumAnalyzer(object):
                  hz_step,
                  with_waveforms,
                  with_grid,
+                 thermal_noise_floor_dBm,
                  subid_name_map):
         self._stream = stream
         self._hz_step = hz_step
         self._with_waveforms = with_waveforms
         self._with_grid = with_grid
         self._subid_name_map = subid_name_map
+        self._thermal_noise_floor_dBm = thermal_noise_floor_dBm
         self._lines = {}
         self._line_total = None
         self._lines_wf = {}
@@ -79,8 +81,6 @@ class SpectrumAnalyzer(object):
         self._max_y_total = np.nan
         self._min_y_wf = np.nan
         self._max_y_wf = np.nan
-
-        self._last_sequence = None
 
         self._freq_range_hz = (hz_min,hz_max)
         self._min_freq_hz = int(np.floor(self._freq_range_hz[0] / self._hz_step) * self._hz_step)
@@ -195,24 +195,24 @@ class SpectrumAnalyzer(object):
         self._fig.canvas.set_window_title('EMANE Spectrum Analyzer [{}]'.format(endpoint))
 
 
-    def _create_df(self,timestamp,receiver_sensitivity_dBm,subid_info,subid_wf_select,store):
+    def _create_df(self,subid_info,subid_wf_select,store):
         subids = set()
 
-        model = defaultdict(lambda : defaultdict(lambda : receiver_sensitivity_dBm))
+        model = defaultdict(lambda : defaultdict(lambda : 0))
 
         for frequency_hz in store:
             for subid in store[frequency_hz]:
                 subids.add(subid)
                 num_steps = subid_info[subid].bandwidth_hz // self._hz_step
 
-                energy_dBm = store[frequency_hz][subid]
+                energy_mW = store[frequency_hz][subid]
 
                 for i in range(0,num_steps+1):
                     bandwidth_frequency_hz = (frequency_hz - subid_info[subid].bandwidth_hz // 2) + i * self._hz_step
                     if bandwidth_frequency_hz >= self._min_freq_hz and bandwidth_frequency_hz <= self._max_freq_hz:
-                        model[bandwidth_frequency_hz][subid] = energy_dBm
+                        model[bandwidth_frequency_hz][subid] = energy_mW
 
-        # fill any missing subids with receiver sensitivity
+        # fill any missing subids with 0 mW
         for subid in set(subid_info.keys()) - subids:
             for frequency_hz in store:
                 num_steps = subid_info[subid].bandwidth_hz // self._hz_step
@@ -220,7 +220,7 @@ class SpectrumAnalyzer(object):
                 for i in range(0,num_steps+1):
                     bandwidth_frequency_hz = (frequency_hz - subid_info[subid].bandwidth_hz // 2) + i * self._hz_step
                     if bandwidth_frequency_hz >= self._min_freq_hz and bandwidth_frequency_hz <= self._max_freq_hz:
-                        model[bandwidth_frequency_hz][subid] = receiver_sensitivity_dBm
+                        model[bandwidth_frequency_hz][subid] = 0
 
             subids.add(subid)
 
@@ -229,7 +229,7 @@ class SpectrumAnalyzer(object):
         for frequency_hz in self._freq_values:
             df_data['Frequency'].append(frequency_hz)
 
-        freq_bins = defaultdict(lambda : receiver_sensitivity_dBm)
+        freq_bins = defaultdict(lambda : 0)
 
         for subid in sorted(subids):
             freq_bins.clear()
@@ -249,10 +249,16 @@ class SpectrumAnalyzer(object):
         for subid in subids:
             key_mW = '{}_mW'.format(subid)
             key_dBm = '{}_dBm'.format(subid)
-            # remove any noise only measurements
-            df[key_dBm] = np.where(np.isclose(df[subid],receiver_sensitivity_dBm), np.nan, df[subid])
-            # convert to mW
-            df[key_mW] = np.power(10,df[key_dBm]/10)
+            df[key_mW] = df[subid]
+            np.seterr(divide = 'ignore')
+            df[key_dBm] = np.where(df[key_mW] == 0,self._thermal_noise_floor_dBm, 10.0 * np.log10(df[key_mW]))
+
+            # set the floor to be the thermal noise floor
+            df[key_dBm] = np.where(df[key_dBm] < self._thermal_noise_floor_dBm,
+                                   self._thermal_noise_floor_dBm,
+                                   df[key_dBm])
+
+            np.seterr(divide = 'warn')
             keys_mW.append(key_mW)
 
         # sum all subid energy in mW
@@ -264,7 +270,12 @@ class SpectrumAnalyzer(object):
 
         # convert to dBm
         np.seterr(divide = 'ignore')
-        df['Total_dBm'] = np.where(df['Total_mW'] == 0,receiver_sensitivity_dBm, 10.0 * np.log10(df['Total_mW']))
+        df['Total_dBm'] = np.where(df['Total_mW'] == 0,self._thermal_noise_floor_dBm, 10.0 * np.log10(df['Total_mW']))
+
+        # set the floor to be the thermal noise floor
+        df['Total_dBm'] = np.where(df['Total_dBm'] < self._thermal_noise_floor_dBm,
+                                   self._thermal_noise_floor_dBm,
+                                   df['Total_dBm'])
         np.seterr(divide = 'warn')
 
         for frequency_hz,total_dBm in zip(self._freq_values,df['Total_dBm']):
@@ -282,25 +293,23 @@ class SpectrumAnalyzer(object):
                 noise_key_mW = 'Noise_mW_{}'.format(subid)
                 noise_key_dB = 'Noise_dB_{}'.format(subid)
 
-                df[noise_key_mW] = np.where(np.isnan(df[key_dBm]),
+                df[noise_key_mW] = np.where(df[key_mW] == 0,
                                             df['Total_mW'],
                                             df['Total_mW'] - df[key_mW])
 
                 np.seterr(divide = 'ignore')
                 df[noise_key_dB] = np.where(df[noise_key_mW] == 0,
-                                            receiver_sensitivity_dBm,
+                                            self._thermal_noise_floor_dBm,
                                             10.0 * np.log10(df[noise_key_mW]))
+
+                # set the floor to be the thermal noise floor
+                df[noise_key_dB] = np.where(df[noise_key_dB] < self._thermal_noise_floor_dBm,
+                                            self._thermal_noise_floor_dBm,
+                                            df[noise_key_dB])
+
                 np.seterr(divide = 'warn')
 
-                #df['Waveform_dBm_{}'.format(subid)] = np.where(np.isnan(df[key_dBm]),
-                #                                               df[noise_key_dB],
-                #                                               df[key_dBm])
-
-
-                df['{}_dBm'.format(subid)].fillna(receiver_sensitivity_dBm,inplace=True)
-
             for subid in subids:
-                #waveform_key = 'Waveform_dBm_{}'.format(subid)
                 waveform_key = '{}_dBm'.format(subid)
                 for frequency_hz,waveform_dBm in zip(self._freq_values,df[waveform_key]):
                     self._waterfall_subid_wf[subid][frequency_hz].appendleft(waveform_dBm)
@@ -312,8 +321,6 @@ class SpectrumAnalyzer(object):
                 self._subids = self._subids.union(subids)
                 self._cycle_subid = cycle(list(self._subids) + [None])
 
-
-
         return df,total_dBm_df,subid_wf_df
 
 
@@ -321,30 +328,11 @@ class SpectrumAnalyzer(object):
         artists = []
 
         try:
-            (timestamp,
-             sequence,
-             receiver_sensitivity_dBm,
-             subid_info,
+            (subid_info,
              store) = self._stream.data()
 
             if store:
-                # self._last_sequence != sequence:
-                # if self._last_sequence != None and sequence != self._last_sequence + 1:
-                #     if not self._alert:
-                #         self._ax_total_w.set_xlabel('Frequency (Hz)\n(!)',fontsize=8)
-                #         self._ax_total_w.figure.canvas.draw()
-                #         self._alert = True
-
-                # elif self._alert:
-                #     self._ax_total_w.set_xlabel('Frequency (Hz)',fontsize=8)
-                #     self._ax_total_w.figure.canvas.draw()
-                #     self._alert = False
-
-                self._last_sequence = sequence
-
-                df,df2,df3 = self._create_df(timestamp,
-                                             receiver_sensitivity_dBm,
-                                             subid_info,
+                df,df2,df3 = self._create_df(subid_info,
                                              self._subid_wf_select,
                                              store)
 
@@ -440,11 +428,10 @@ class SpectrumAnalyzer(object):
                                 self._lines[subid].set_visible(False)
 
                         self._lines[subid].set_data(df['Frequency'],
-                                                    df['{}_dBm'.format(subid)].fillna(receiver_sensitivity_dBm))
+                                                    df['{}_dBm'.format(subid)].fillna(self._thermal_noise_floor_dBm))
 
                         with warnings.catch_warnings():
                             warnings.filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
-                            #min_val = np.nanmin(df['Waveform_dBm_{}'.format(subid)])
 
                             # older numpy always return array, newer return scalar
                             min_val = np.nanmin(df['{}_dBm'.format(subid)])
@@ -455,8 +442,6 @@ class SpectrumAnalyzer(object):
                             if np.isnan(self._min_y_wf) or self._min_y_wf > min_val:
                                 self._min_y_wf = np.floor(min_val / 5) * 5 - 5
                                 reset_ax_lim = not np.isnan(self._min_y_wf)
-
-                            #max_val = np.nanmax(df['Waveform_dBm_{}'.format(subid)])
 
                             # older numpy always return array, newer return scalar
                             max_val = np.nanmax(df['{}_dBm'.format(subid)])
@@ -472,7 +457,7 @@ class SpectrumAnalyzer(object):
                         self._lines['Noise'].set_visible(False)
                     else:
                         self._lines['Noise'].set_data(df['Frequency'],
-                                                      df['Noise_dB_{}'.format(self._subid_wf_select)].fillna(receiver_sensitivity_dBm))
+                                                      df['Noise_dB_{}'.format(self._subid_wf_select)].fillna(self._thermal_noise_floor_dBm))
                         self._lines['Noise'].set_visible(True)
 
                     if reset_ax_lim:
@@ -532,6 +517,10 @@ argument_parser.add_argument('endpoint',
                              type=str,
                              help='signal energy subscribe endpoint')
 
+argument_parser.add_argument('thermal-noise-floor',
+                             type=float,
+                             help='thermal noise floor in dB')
+
 argument_parser.add_argument('--hz-min',
                              default=2000000000,
                              type=int,
@@ -587,6 +576,7 @@ def do_main():
                              args['hz_step'],
                              args['with_waveforms'],
                              args['with_grid'],
+                             args['thermal-noise-floor'],
                              subid_name_map)
 
     stream.run()

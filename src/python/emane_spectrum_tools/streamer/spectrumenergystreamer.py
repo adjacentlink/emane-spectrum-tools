@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019 - Adjacent Link LLC, Bridgewater, New Jersey
+# Copyright (c) 2019-2020 - Adjacent Link LLC, Bridgewater, New Jersey
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,6 @@ import zmq
 import threading
 import traceback
 import copy
-import numpy as np
 from collections import namedtuple
 from collections import defaultdict
 
@@ -105,7 +104,6 @@ class SpectrumEnergyStreamer(object):
         self._lock.acquire()
 
         if self._first:
-            self._receiver_sensitivity_dBm = measurement.receiver_sensitivity_dBm
             self._first = False
 
         for entry in measurement.entries:
@@ -113,12 +111,7 @@ class SpectrumEnergyStreamer(object):
 
             for energy in entry.energies:
 
-                energy_dBm = max(energy.energy_dBm)
-
-                if np.isclose(energy_dBm,measurement.receiver_sensitivity_dBm):
-                    energy_mW = 0
-                else:
-                    energy_mW = np.power(10,energy_dBm/10.0)
+                energy_mW = max(energy.energy_mW)
 
                 self._store[energy.frequency_hz][entry.subid] = max(self._store[energy.frequency_hz][entry.subid],
                                                                     energy_mW)
@@ -130,25 +123,10 @@ class SpectrumEnergyStreamer(object):
         self._lock.release()
 
     def data(self):
-        store_dBm = defaultdict(lambda : defaultdict(lambda :  self._receiver_sensitivity_dBm))
-
         self._lock.acquire()
 
-        # convert totals to dBm
-        for freq in self._store:
-            for subid in self._store[freq]:
-                energy_dBm = self._receiver_sensitivity_dBm
-
-                if self._store[freq][subid] > 0:
-                    energy_dBm = 10.0 * np.log10(self._store[freq][subid])
-
-                store_dBm[freq][subid] = energy_dBm
-
-        ret = (0,
-               0,
-               self._receiver_sensitivity_dBm,
-               copy.copy(self._subid_info),
-               store_dBm)
+        ret = (copy.copy(self._subid_info),
+               copy.copy(self._store))
 
         self._store.clear()
 
