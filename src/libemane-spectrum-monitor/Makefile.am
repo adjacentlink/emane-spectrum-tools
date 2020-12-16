@@ -6,8 +6,11 @@ libemane_spectrum_monitor_la_CPPFLAGS= \
  -I$(emane_SRC_ROOT)/src/libemane
 
 libemane_spectrum_monitor_la_SOURCES = \
+ maxnoisebin.h \
  monitorphy.h \
- monitorphy.cc
+ monitorphy.cc \
+ spectrummonitoralt.h \
+ spectrummonitoralt.cc
 
 EXTRA_DIST= \
  spectrummonitor.proto

@@ -32,6 +32,7 @@
  */
 
 #include "monitorphy.h"
+#include "maxnoisebin.h"
 
 #include "emane/commonphyheader.h"
 #include "emane/configureexception.h"
@@ -72,18 +73,20 @@ namespace
   const std::uint16_t DROP_CODE_FADINGMANAGER_SELECTION     = 11;
 
   EMANE::StatisticTableLabels STATISTIC_TABLE_LABELS{"Out-of-Band",
-                                                     "Rx Sensitivity",
-                                                     "Propagation Model",
-                                                     "Gain Location",
-                                                     "Gain Horizon",
-                                                     "Gain Profile",
-                                                     "Not FOI",
-                                                     "Spectrum Clamp",
-                                                     "Fade Location",
-                                                     "Fade Algorithm",
-                                                     "Fade Select"};
+    "Rx Sensitivity",
+    "Propagation Model",
+    "Gain Location",
+    "Gain Horizon",
+    "Gain Profile",
+    "Not FOI",
+    "Spectrum Clamp",
+    "Fade Location",
+    "Fade Algorithm",
+    "Fade Select"};
 
   const std::string FADINGMANAGER_PREFIX{"fading."};
+
+
 }
 
 EMANE::SpectrumTools::MonitorPhy::MonitorPhy(NEMId id,
@@ -91,8 +94,6 @@ EMANE::SpectrumTools::MonitorPhy::MonitorPhy(NEMId id,
   PHYLayerImplementor{id, pPlatformService},
   gainManager_{id},
   locationManager_{id},
-  u64BandwidthHz_{},
-  dReceiverSensitivitydBm_{},
   commonLayerStatistics_{STATISTIC_TABLE_LABELS,{},"0"},
   eventTablePublisher_{id},
   noiseBinSize_{},
@@ -125,14 +126,6 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
                                         {true},
                                         "Defines whether fixed antenna gain is used or whether"
                                         " antenna profiles are in use.");
-
-  configRegistrar.registerNumeric<std::uint64_t>("bandwidth",
-                                                 EMANE::ConfigurationProperties::DEFAULT,
-                                                 {1000000},
-                                                 "Defines receiver bandwidth in Hz and also serves as the"
-                                                 " default bandwidth for OTA transmissions when not provided"
-                                                 " by the MAC.",
-                                                 1);
 
   configRegistrar.registerNumeric<std::uint64_t>("noisebinsize",
                                                  EMANE::ConfigurationProperties::DEFAULT,
@@ -253,19 +246,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
   for(const auto & item : update)
     {
-      if(item.first == "bandwidth")
-        {
-          u64BandwidthHz_ = item.second[0].asUINT64();
-
-          LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
-                                  INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %ju Hz",
-                                  id_,
-                                  __func__,
-                                  item.first.c_str(),
-                                  u64BandwidthHz_);
-        }
-      else if(item.first == "fixedantennagain")
+      if(item.first == "fixedantennagain")
         {
           optionalFixedAntennaGaindBi_.first = item.second[0].asDouble();
 
@@ -463,8 +444,6 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
     }
 
   fadingManager_.configure(fadingManagerConfiguration);
-
-  dReceiverSensitivitydBm_ = THERMAL_NOISE_DB + dSystemNoiseFiguredB_ + 10.0 * log10(u64BandwidthHz_);
 
   if((maxSegmentOffset_ + maxMessagePropagation_ + 2 * maxSegmentDuration_) % noiseBinSize_ !=
      Microseconds::zero())
@@ -681,8 +660,8 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                   double powerdBm{(optionalSegmentPowerdBm.second ?
                                    optionalSegmentPowerdBm.first :
                                    transmitter.getPowerdBm()) +
-                                  gainInfodBi.first -
-                                  dPathlossdB};
+                    gainInfodBi.first -
+                    dPathlossdB};
 
                   auto powerdBmInfo = fadingManager_.calculate(transmitter.getNEMId(),
                                                                powerdBm,
@@ -841,67 +820,35 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
     {
       try
         {
-          FrequencySet txFrequencies{};
-
           auto iter  = spectrumMap_.find(commonPHYHeader.getSubId());
 
           if(iter == spectrumMap_.end())
             {
               iter = spectrumMap_.insert(std::make_pair(commonPHYHeader.getSubId(),
-                                                        make_tuple(commonPHYHeader.getBandwidthHz(),
-                                                                   FrequencySet{},
-                                                                   std::unique_ptr<SpectrumMonitor>(new SpectrumMonitor())))).first;
-            }
-          else if(std::get<0>(iter->second) != commonPHYHeader.getBandwidthHz())
-            {
-              std::get<0>(iter->second) = commonPHYHeader.getBandwidthHz();
-            }
-
-          int iNewTxFrequencies{};
-
-          for(const auto & segment : frequencySegments)
-            {
-              txFrequencies.insert(segment.getFrequencyHz());
-
-              iNewTxFrequencies += std::get<1>(iter->second).count(segment.getFrequencyHz()) == 0;
-            }
-
-          if(!iNewTxFrequencies)
-            {
-              // not really out of band, it is all in band with no
-              // out of band using outofband disabled logic that
-              // removes in band signal energy
-              std::get<2>(iter->second)->update(now,
-                                                commonPHYHeader.getTxTime(),
-                                                propagation,
-                                                frequencySegments,
-                                                commonPHYHeader.getBandwidthHz(),
-                                                rxPowerSegments,
-                                                false,
-                                                transmitters,
-                                                commonPHYHeader.getSubId(),
-                                                {});
+                                                        std::make_tuple(commonPHYHeader.getBandwidthHz(),
+                                                                        std::unique_ptr<SpectrumMonitorAlt>(new SpectrumMonitorAlt(commonPHYHeader.getSubId(),
+                                                                                                                                   noiseBinSize_,
+                                                                                                                                   maxSegmentOffset_,
+                                                                                                                                   maxMessagePropagation_,
+                                                                                                                                   maxSegmentDuration_,
+                                                                                                                                   timeSyncThreshold_,
+                                                                                                                                   bNoiseMaxClamp_))))).first;
             }
           else
             {
-              // add new frequencies
-              std::get<1>(iter->second).insert(txFrequencies.begin(),
-                                               txFrequencies.end());
-
-              //re-intialize with new freq set
-              std::get<2>(iter->second)->initialize(0,
-                                                    std::get<1>(iter->second),
-                                                    u64BandwidthHz_,
-                                                    Utils::DB_TO_MILLIWATT(dReceiverSensitivitydBm_),
-                                                    SpectrumMonitor::NoiseMode::OUTOFBAND,
-                                                    noiseBinSize_,
-                                                    maxSegmentOffset_,
-                                                    maxMessagePropagation_,
-                                                    maxSegmentDuration_,
-                                                    timeSyncThreshold_,
-                                                    bNoiseMaxClamp_,
-                                                    true);
+              if(std::get<0>(iter->second) != commonPHYHeader.getBandwidthHz())
+                {
+                  std::get<0>(iter->second) = commonPHYHeader.getBandwidthHz();
+                }
             }
+
+          std::get<1>(iter->second)->update(now,
+                                            commonPHYHeader.getTxTime(),
+                                            propagation,
+                                            frequencySegments,
+                                            commonPHYHeader.getBandwidthHz(),
+                                            rxPowerSegments,
+                                            transmitters);
         }
       catch(SpectrumServiceException & exp)
         {
@@ -911,7 +858,7 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   DEBUG_LEVEL,
-                                  "PHYI %03hu FrameworkPHY::%s src %hu, dst %hu,"
+                                  "PHYI %03hu MonitorPhy::%s src %hu, dst %hu,"
                                   " drop spectrum out of bound %s",
                                   id_,
                                   __func__,
@@ -1038,8 +985,6 @@ void EMANE::SpectrumTools::MonitorPhy::querySpectrumService()
 
       msg.set_duration(spectrumQueryBinSize_.count());
 
-      msg.set_receiver_sensitivity_dbm(dReceiverSensitivitydBm_);
-
       msg.set_sequence(u64SequenceNumber_++);
 
       for(const auto & iter : spectrumMap_)
@@ -1050,22 +995,23 @@ void EMANE::SpectrumTools::MonitorPhy::querySpectrumService()
 
           pEntry->set_bandwidth_hz(std::get<0>(iter.second));
 
-          for(const auto & frequencyHz : std::get<1>(iter.second))
+          auto pSpectorMonintor = std::get<1>(iter.second).get();
+
+          for(const auto & frequencyHz : pSpectorMonintor->getFrequencies())
             {
               auto pEnergy = pEntry->add_energies();
 
               pEnergy->set_frequency_hz(frequencyHz);
 
-              auto window = std::get<2>(iter.second)->request(frequencyHz,
-                                                              spectrumQueryRate_ * (currentQueryIndex - lastQueryIndex_),
-                                                              startTime);
+              auto window = pSpectorMonintor->request(frequencyHz,
+                                                      spectrumQueryRate_ * (currentQueryIndex - lastQueryIndex_),
+                                                      startTime);
 
               for(std::uint64_t i = 0; i < binSummaryCount; ++i)
                 {
-                  pEnergy->add_energy_dbm(std::get<0>(Utils::maxBinNoiseFloorRange(window,
-                                                                                   0,
-                                                                                   startTime + spectrumQueryBinSize_ * i,
-                                                                                   startTime + spectrumQueryBinSize_ * (i + 1) - Microseconds{1})));
+                  pEnergy->add_energy_mw(maxNoiseBin(window,
+                                                     startTime + spectrumQueryBinSize_ * i,
+                                                     startTime + spectrumQueryBinSize_ * (i + 1) - Microseconds{1}));
                 }
             }
         }
@@ -1089,12 +1035,12 @@ void EMANE::SpectrumTools::MonitorPhy::querySpectrumService()
 
           if(recorderFileStream_.is_open())
             {
-             std::uint32_t u32MessageFrameLength = htonl(sSerialization.length());
+              std::uint32_t u32MessageFrameLength = htonl(sSerialization.length());
 
-             recorderFileStream_.write(reinterpret_cast<char *>(&u32MessageFrameLength),
-                                       sizeof(u32MessageFrameLength));
+              recorderFileStream_.write(reinterpret_cast<char *>(&u32MessageFrameLength),
+                                        sizeof(u32MessageFrameLength));
 
-             recorderFileStream_.write(sSerialization.c_str(),sSerialization.length());
+              recorderFileStream_.write(sSerialization.c_str(),sSerialization.length());
             }
         }
 
