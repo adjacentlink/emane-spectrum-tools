@@ -56,18 +56,21 @@ EMANE::SpectrumTools::SpectrumMonitorAlt::SpectrumMonitorAlt(std::uint16_t u16Su
   u16SubId_{u16SubId}{}
 
 
-std::tuple<EMANE::TimePoint,EMANE::Microseconds,EMANE::Microseconds,EMANE::FrequencySegments,bool>
+EMANE::SpectrumTools::SpectrumUpdate
 EMANE::SpectrumTools::SpectrumMonitorAlt::update(const TimePoint & now,
                                                  const TimePoint & txTime,
                                                  const Microseconds & propagationDelay,
                                                  const FrequencySegments & segments,
                                                  std::uint64_t u64SegmentBandwidthHz,
                                                  const std::vector<double> & rxPowersMilliWatt,
-                                                 const std::vector<NEMId> & transmitters)
+                                                 const std::vector<NEMId> & transmitters,
+                                                 AntennaIndex txAntennaIndex)
+
+
 {
   if(segments.size() != rxPowersMilliWatt.size())
     {
-      return std::make_tuple(TimePoint{},Microseconds{},Microseconds{},FrequencySegments{},false);
+      return std::make_tuple(TimePoint{},Microseconds{},Microseconds{},FrequencySegments{},false,0);
     }
 
   // validate txTime in case of time sync issues
@@ -170,7 +173,8 @@ EMANE::SpectrumTools::SpectrumMonitorAlt::update(const TimePoint & now,
                                  rxPowersMilliWatt[i],
                                  transmitters,
                                  u64LowerFrequencyHz,
-                                 u64UpperFrequencyHz);
+                                 u64UpperFrequencyHz,
+                                 txAntennaIndex);
         }
 
       ++i;
@@ -181,7 +185,8 @@ EMANE::SpectrumTools::SpectrumMonitorAlt::update(const TimePoint & now,
                          validPropagation,
                          std::chrono::duration_cast<Microseconds>(maxEoR - minSoR),
                          FrequencySegments{},
-                         false);
+                         false,
+                         0);
 }
 
 EMANE::FrequencySet

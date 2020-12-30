@@ -32,12 +32,13 @@
  */
 
 #include "monitorphy.h"
-#include "maxnoisebin.h"
 
 #include "emane/commonphyheader.h"
 #include "emane/configureexception.h"
-#include "emane/startexception.h"
 #include "emane/spectrumserviceexception.h"
+#include "emane/startexception.h"
+
+#include "emane/utils/conversionutils.h"
 
 #include "emane/events/antennaprofileevent.h"
 #include "emane/events/antennaprofileeventformatter.h"
@@ -48,12 +49,31 @@
 #include "emane/events/fadingselectionevent.h"
 #include "emane/events/fadingselectioneventformatter.h"
 
+#include "emane/controls/otatransmittercontrolmessage.h"
+#include "emane/controls/receivepropertiescontrolmessage.h"
+#include "emane/controls/antennaprofilecontrolmessage.h"
+#include "emane/controls/spectrumfilteraddcontrolmessage.h"
+#include "emane/controls/spectrumfilterremovecontrolmessage.h"
+#include "emane/controls/spectrumfilterdatacontrolmessage.h"
+#include "emane/controls/mimoreceivepropertiescontrolmessage.h"
+
+#include "emane/controls/transmittercontrolmessageformatter.h"
+#include "emane/controls/frequencyofinterestcontrolmessageformatter.h"
+#include "emane/controls/spectrumfilteraddcontrolmessageformatter.h"
+#include "emane/controls/spectrumfilterremovecontrolmessageformatter.h"
+#include "emane/controls/rxantennaupdatecontrolmessageformatter.h"
+#include "emane/controls/rxantennaremovecontrolmessageformatter.h"
+#include "emane/controls/rxantennaaddcontrolmessageformatter.h"
+
 #include "freespacepropagationmodelalgorithm.h"
 #include "tworaypropagationmodelalgorithm.h"
 #include "precomputedpropagationmodelalgorithm.h"
-#include "emane/utils/spectrumwindowutils.h"
+#include "spectrumservice.h"
 
 #include "spectrummonitor.pb.h"
+#include "maxnoisebin.h"
+
+#include <iterator>
 #include <zmq.h>
 #include <algorithm>
 #include <iterator>
@@ -71,6 +91,9 @@ namespace
   const std::uint16_t DROP_CODE_FADINGMANAGER_LOCATION      = 9;
   const std::uint16_t DROP_CODE_FADINGMANAGER_ALGORITHM     = 10;
   const std::uint16_t DROP_CODE_FADINGMANAGER_SELECTION     = 11;
+  const std::uint16_t DROP_CODE_ANTENNA_FREQ_INDEX          = 12;
+  const std::uint16_t DROP_CODE_GAINMANAGER_ANTENNA_INDEX   = 13;
+  const std::uint16_t DROP_CODE_MISSING_CONTROL             = 14;
 
   EMANE::StatisticTableLabels STATISTIC_TABLE_LABELS{"Out-of-Band",
     "Rx Sensitivity",
@@ -82,18 +105,23 @@ namespace
     "Spectrum Clamp",
     "Fade Location",
     "Fade Algorithm",
-    "Fade Select"};
+    "Fade Select",
+    "Antenna Freq",
+    "Gain Antenna",
+    "Missing Control"};
 
   const std::string FADINGMANAGER_PREFIX{"fading."};
-
-
 }
 
 EMANE::SpectrumTools::MonitorPhy::MonitorPhy(NEMId id,
                                              PlatformServiceProvider * pPlatformService):
   PHYLayerImplementor{id, pPlatformService},
-  gainManager_{id},
+  pSpectrumService_{new SpectrumService{}},
+  antennaManager_{},
   locationManager_{id},
+  u64BandwidthHz_{},
+  u64RxCenterFrequencyHz_{},
+  u64SubbandBinSizeHz_{},
   commonLayerStatistics_{STATISTIC_TABLE_LABELS,{},"0"},
   eventTablePublisher_{id},
   noiseBinSize_{},
@@ -103,10 +131,11 @@ EMANE::SpectrumTools::MonitorPhy::MonitorPhy(NEMId id,
   timeSyncThreshold_{},
   bNoiseMaxClamp_{},
   dSystemNoiseFiguredB_{},
-  fadingManager_{id, pPlatformService,FADINGMANAGER_PREFIX},
-  pZMQContext_{},
-  pZMQSocket_{},
-  u64SequenceNumber_{}{}
+  pTimeSyncThresholdRewrite_{},
+  pGainCacheHit_{},
+  pGainCacheMiss_{},
+  fadingManager_{id, pPlatformService,FADINGMANAGER_PREFIX}{}
+
 
 EMANE::SpectrumTools::MonitorPhy::~MonitorPhy(){}
 
@@ -129,7 +158,7 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
 
   configRegistrar.registerNumeric<std::uint64_t>("noisebinsize",
                                                  EMANE::ConfigurationProperties::DEFAULT,
-                                                 {20},
+                                                 {10000},
                                                  "Defines the noise bin size in microseconds and translates"
                                                  " into timing accuracy associated with aligning the start and"
                                                  " end of reception times of multiple packets for modeling of"
@@ -170,7 +199,7 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
                                                  "Defines the time sync detection threshold in microseconds."
                                                  " If a received OTA message is more than this threshold, the"
                                                  " message reception time will be used as the source transmission"
-                                                 " time instead of the time contained in the Common PHY Header."
+                                                 " time instead of the time contained in the Common Phy Header."
                                                  " This allows the emulator to be used across distributed nodes"
                                                  " without time sync.",
                                                  1);
@@ -183,12 +212,6 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
                                                   1,
                                                   1,
                                                   "^(precomputed|2ray|freespace)$");
-
-  configRegistrar.registerNumeric<double>("systemnoisefigure",
-                                          EMANE::ConfigurationProperties::DEFAULT,
-                                          {4.0},
-                                          "Defines the system noise figure in dB and is used to determine the"
-                                          " receiver sensitivity.");
 
   configRegistrar.registerNumeric<std::uint64_t>("spectrumquery.rate",
                                                  EMANE::ConfigurationProperties::DEFAULT,
@@ -208,12 +231,15 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
   configRegistrar.registerNonNumeric<INETAddr>("spectrumquery.publishendpoint",
                                                ConfigurationProperties::DEFAULT,
                                                {INETAddr{"0.0.0.0",8883}},
-                                               "Spectrum query ZMQ Pub socket endpoint.");
+                                               "Spectrum Query ZMQ Pub socket endpoint.");
 
-  configRegistrar.registerNonNumeric<std::string>("spectrumquery.recorderfile",
-                                                  ConfigurationProperties::NONE,
-                                                  {},
-                                                  "Spectrum query measurement recorder file.");
+  configRegistrar.registerNumeric<bool>("stats.receivepowertableenable",
+                                        EMANE::ConfigurationProperties::DEFAULT,
+                                        {true},
+                                        "Defines whether the receive power table will be populated. Large number"
+                                        " of antenna (MIMO) and/or frequency segments will increases processing"
+                                        " load when populating.");
+
 
   auto & eventRegistrar = registrar.eventRegistrar();
 
@@ -236,6 +262,13 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
   pTimeSyncThresholdRewrite_ =
     statisticRegistrar.registerNumeric<std::uint64_t>("numTimeSyncThresholdRewrite",
                                                       StatisticProperties::CLEARABLE);
+  pGainCacheHit_ =
+    statisticRegistrar.registerNumeric<std::uint64_t>("numGainCacheHit",
+                                                      StatisticProperties::CLEARABLE);
+
+  pGainCacheMiss_ =
+    statisticRegistrar.registerNumeric<std::uint64_t>("numGainCacheMiss",
+                                                      StatisticProperties::CLEARABLE);
 
   fadingManager_.initialize(registrar);
 }
@@ -246,13 +279,25 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
   for(const auto & item : update)
     {
-      if(item.first == "fixedantennagain")
+      if(item.first == "subbandbinsize")
+        {
+          u64SubbandBinSizeHz_ = item.second[0].asUINT64();
+
+          LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
+                                  INFO_LEVEL,
+                                  "PHYI %03hu MonitorPhy::%s: %s = %ju Hz",
+                                  id_,
+                                  __func__,
+                                  item.first.c_str(),
+                                  u64SubbandBinSizeHz_);
+        }
+      else if(item.first == "fixedantennagain")
         {
           optionalFixedAntennaGaindBi_.first = item.second[0].asDouble();
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %3.2f dBi",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %3.2f dBi",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -265,7 +310,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %s",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %s",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -291,7 +336,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %s",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %s",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -303,7 +348,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %ju usec",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %ju usec",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -315,7 +360,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %s",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %s",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -327,7 +372,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %ju usec",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %ju usec",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -339,7 +384,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %ju usec",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %ju usec",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -351,7 +396,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %ju usec",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %ju usec",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -363,7 +408,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %ju usec",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %ju usec",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -375,7 +420,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %3.2f dB",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %3.2f dB",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -429,6 +474,18 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
                                   item.first.c_str(),
                                   sSpectrumQueryRecorderFile_.c_str());
         }
+      else if(item.first == "stats.receivepowertableenable")
+        {
+          bStatsReceivePowerTableEnable_ = item.second[0].asBool();
+
+          LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
+                                  INFO_LEVEL,
+                                  "PHYI %03hu MonitorPhy::%s: %s = %s",
+                                  id_,
+                                  __func__,
+                                  item.first.c_str(),
+                                  bStatsReceivePowerTableEnable_ ? "on" : "off");
+        }
       else
         {
           if(!item.first.compare(0,FADINGMANAGER_PREFIX.size(),FADINGMANAGER_PREFIX))
@@ -437,7 +494,7 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
             }
           else
             {
-              throw makeException<ConfigureException>("SpectrumTools::MonitorPhy: Unexpected configuration item %s",
+              throw makeException<ConfigureException>("MonitorPhy: Unexpected configuration item %s",
                                                       item.first.c_str());
             }
         }
@@ -453,15 +510,33 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
                                               " noisebinsize");
     }
 
+  pSpectrumService_->initialize(0, //subid
+                                NoiseMode::OUTOFBAND,
+                                noiseBinSize_,
+                                maxSegmentOffset_,
+                                maxMessagePropagation_,
+                                maxSegmentDuration_,
+                                timeSyncThreshold_,
+                                bNoiseMaxClamp_,
+                                false);
+
 }
 
 void EMANE::SpectrumTools::MonitorPhy::start()
 {
   LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                           DEBUG_LEVEL,
-                          "PHYI %03hu SpectrumTools::MonitorPhy::%s",
+                          "PHYI %03hu MonitorPhy::%s",
                           id_,
                           __func__);
+
+  // add default antenna
+  Antenna rxAntenna = optionalFixedAntennaGaindBi_.second ?
+    Antenna::createIdealOmni(DEFAULT_ANTENNA_INDEX,
+                             optionalFixedAntennaGaindBi_.first) :
+    Antenna::createProfileDefined(DEFAULT_ANTENNA_INDEX);
+
+  antennaManager_.update(id_,rxAntenna);
 
   pZMQContext_ = zmq_ctx_new();
 
@@ -508,33 +583,17 @@ void EMANE::SpectrumTools::MonitorPhy::stop()
 {
   LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                           DEBUG_LEVEL,
-                          "PHYI %03hu SpectrumTools::MonitorPhy::%s",
+                          "PHYI %03hu MonitorPhy::%s",
                           id_,
                           __func__);
 
-  if(recorderFileStream_.is_open())
-    {
-      recorderFileStream_.close();
-    }
-
-  if(pZMQSocket_)
-    {
-      zmq_close(pZMQSocket_);
-      pZMQSocket_ = nullptr;
-    }
-
-  if(pZMQContext_)
-    {
-      zmq_ctx_destroy(pZMQContext_);
-      pZMQContext_ = nullptr;
-    }
 }
 
 void EMANE::SpectrumTools::MonitorPhy::destroy() throw()
 {
   LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                           DEBUG_LEVEL,
-                          "PHYI %03hu SpectrumTools::MonitorPhy::%s",
+                          "PHYI %03hu MonitorPhy::%s",
                           id_,
                           __func__);
 
@@ -552,7 +611,7 @@ void EMANE::SpectrumTools::MonitorPhy::processConfiguration(const ConfigurationU
 
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                                   INFO_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s: %s = %3.2f dBi",
+                                  "PHYI %03hu MonitorPhy::%s: %s = %3.2f dBi",
                                   id_,
                                   __func__,
                                   item.first.c_str(),
@@ -571,7 +630,7 @@ void EMANE::SpectrumTools::MonitorPhy::processConfiguration(const ConfigurationU
   fadingManager_.modify(fadingManagerConfiguration);
 }
 
-void EMANE::SpectrumTools::MonitorPhy::processDownstreamControl(const ControlMessages & )
+void EMANE::SpectrumTools::MonitorPhy::processDownstreamControl(const ControlMessages &)
 {}
 
 void EMANE::SpectrumTools::MonitorPhy::processDownstreamPacket(DownstreamPacket &,
@@ -579,11 +638,11 @@ void EMANE::SpectrumTools::MonitorPhy::processDownstreamPacket(DownstreamPacket 
 {}
 
 
-void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket(const CommonPHYHeader & commonPHYHeader,
+void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket(const CommonPHYHeader & commonPhyHeader,
                                                              UpstreamPacket & pkt,
                                                              const ControlMessages &)
 {
-  processUpstreamPacket_i(Clock::now(),commonPHYHeader,pkt,{});
+  processUpstreamPacket_i(Clock::now(),commonPhyHeader,pkt,{});
 }
 
 void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint & now,
@@ -594,287 +653,248 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
   LOGGER_VERBOSE_LOGGING_FN_VARGS(pPlatformService_->logService(),
                                   DEBUG_LEVEL,
                                   std::bind(&CommonPHYHeader::format, std::ref(commonPHYHeader)),
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s Common PHY Header",
+                                  "PHYI %03hu MonitorPhy::%s Common Phy Header",
                                   id_,
                                   __func__);
 
-  commonLayerStatistics_.processInbound(pkt);
-
   const  auto & pktInfo = pkt.getPacketInfo();
 
-  bool bDrop{};
+  commonLayerStatistics_.processInbound(pkt);
 
-  const auto & frequencySegments = commonPHYHeader.getFrequencySegments();
-
-  std::vector<double> rxPowerSegments(frequencySegments.size(),0);
-
-  Microseconds propagation{};
-
-  bool bHavePropagationDelay{};
-
-  std::vector<NEMId> transmitters{};
-
-  for(const auto & transmitter :  commonPHYHeader.getTransmitters())
+  if(!commonPHYHeader.getTransmitAntennas().size())
     {
-      transmitters.push_back(transmitter.getNEMId());
+      LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
+                              ERROR_LEVEL,
+                              "PHYI %03hu MonitorPhy::%s "
+                              " src %hu, dst %hu, drop no tx antennas",
+                              id_,
+                              __func__,
+                              pktInfo.getSource(),
+                              pktInfo.getDestination());
 
-      // get the location info for a pair of nodes
-      auto locationPairInfoRet = locationManager_.getLocationInfo(transmitter.getNEMId());
 
-      // get the propagation model pathloss between a pair of nodes for *each* segment
-      auto pathlossInfo = (*pPropagationModelAlgorithm_)(transmitter.getNEMId(),
-                                                         locationPairInfoRet.first,
-                                                         frequencySegments);
 
-      // if pathloss is available
-      if(pathlossInfo.second)
+      commonLayerStatistics_.processOutbound(pkt,
+                                             std::chrono::duration_cast<Microseconds>(Clock::now() - now),
+                                             DROP_CODE_MISSING_CONTROL);
+
+      // drop
+      return;
+    }
+
+  auto iter  = spectrumMap_.find(commonPHYHeader.getSubId());
+
+  if(iter == spectrumMap_.end())
+    {
+      auto pSpectrumMonitorAlt = new SpectrumMonitorAlt{commonPHYHeader.getSubId(),
+        noiseBinSize_,
+        maxSegmentOffset_,
+        maxMessagePropagation_,
+        maxSegmentDuration_,
+        timeSyncThreshold_,
+        bNoiseMaxClamp_};
+
+      iter =
+        spectrumMap_.insert(std::make_pair(commonPHYHeader.getSubId(),
+                                           std::make_tuple(commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz(),
+                                                           std::unique_ptr<SpectrumMonitorAlt>(pSpectrumMonitorAlt),
+                                                           std::unique_ptr<ReceiveProcessorAlt>(new ReceiveProcessorAlt{id_,
+                                                                                                                        0,
+                                                                                                                        DEFAULT_ANTENNA_INDEX,
+                                                                                                                        antennaManager_,
+                                                                                                                        pSpectrumMonitorAlt,
+                                                                                                                        pPropagationModelAlgorithm_.get(),
+                                                                                                                        fadingManager_.createFadingAlgorithmStore(),
+                                                                                                                        bStatsReceivePowerTableEnable_})))).first;
+
+    }
+  else
+    {
+      if(std::get<0>(iter->second) != commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz())
         {
-          // calculate the combined gain (Tx + Rx antenna gain) dBi
-          // note: gain manager accesses antenna profiles, knows self node profile info
-          //       if available, and is updated with all nodes profile info
-          auto gainInfodBi = gainManager_.determineGain(transmitter.getNEMId(),
-                                                        locationPairInfoRet.first,
-                                                        optionalFixedAntennaGaindBi_,
-                                                        commonPHYHeader.getOptionalFixedAntennaGaindBi());
-
-          // if gain is available
-          if(gainInfodBi.second == EMANE::GainManager::GainStatus::SUCCESS)
-            {
-              using ReceivePowerPubisherUpdate = std::tuple<NEMId,std::uint64_t,double>;
-
-              // set to prevent multiple ReceivePowerTablePublisher updates
-              // for the same NEM frequency pair in a frequency segment list
-              std::set<ReceivePowerPubisherUpdate> receivePowerTableUpdate{};
-
-              // frequency segment iterator to map pathloss per segment to
-              // the associated segment
-              FrequencySegments::const_iterator freqIter{frequencySegments.begin()};
-
-              std::size_t i{};
-
-              // sum up the rx power for each segment
-              for(const auto & dPathlossdB : pathlossInfo.first)
-                {
-                  auto optionalSegmentPowerdBm = freqIter->getPowerdBm();
-
-                  double powerdBm{(optionalSegmentPowerdBm.second ?
-                                   optionalSegmentPowerdBm.first :
-                                   transmitter.getPowerdBm()) +
-                    gainInfodBi.first -
-                    dPathlossdB};
-
-                  auto powerdBmInfo = fadingManager_.calculate(transmitter.getNEMId(),
-                                                               powerdBm,
-                                                               locationPairInfoRet);
-
-                  if(powerdBmInfo.second == FadingManager::FadingStatus::SUCCESS)
-                    {
-                      receivePowerTableUpdate.insert(ReceivePowerPubisherUpdate{transmitter.getNEMId(),
-                                                                                freqIter->getFrequencyHz(),
-                                                                                powerdBmInfo.first});
-
-                      ++freqIter;
-
-                      rxPowerSegments[i++] += Utils::DB_TO_MILLIWATT(powerdBmInfo.first);
-                    }
-                  else
-                    {
-                      // drop due to FadingManager not enough info
-                      bDrop = true;
-
-                      std::uint16_t u16Code{};
-
-                      const char * pzReason{};
-
-                      switch(powerdBmInfo.second)
-                        {
-                        case FadingManager::FadingStatus::ERROR_LOCATIONINFO:
-                          pzReason = "fading missing location info";
-                          u16Code = DROP_CODE_FADINGMANAGER_LOCATION;
-                          break;
-                        case FadingManager::FadingStatus::ERROR_ALGORITHM:
-                          pzReason = "fading algorithm error/missing info";
-                          u16Code = DROP_CODE_FADINGMANAGER_ALGORITHM;
-                          break;
-                        case FadingManager::FadingStatus::ERROR_SELECTION:
-                          pzReason = "fading algorithm selection unkown";
-                          u16Code = DROP_CODE_FADINGMANAGER_SELECTION;
-                          break;
-                        default:
-                          pzReason = "unknown";
-                          break;
-                        }
-
-                      commonLayerStatistics_.processOutbound(pkt,
-                                                             std::chrono::duration_cast<Microseconds>(Clock::now() - now),
-                                                             u16Code);
-
-                      LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
-                                              DEBUG_LEVEL,
-                                              "PHYI %03hu SpectrumTools::MonitorPhy::%s transmitter %hu,"
-                                              " src %hu, dst %hu, drop %s",
-                                              id_,
-                                              __func__,
-                                              transmitter.getNEMId(),
-                                              pktInfo.getSource(),
-                                              pktInfo.getDestination(),
-                                              pzReason);
-
-                      break;
-                    }
-                }
-
-              for(const auto & entry : receivePowerTableUpdate)
-                {
-                  receivePowerTablePublisher_.update(std::get<0>(entry),
-                                                     std::get<1>(entry),
-                                                     std::get<2>(entry),
-                                                     commonPHYHeader.getTxTime());
-                }
-
-
-              // calculate propagation delay from 1 of the transmitters
-              //  note: these are collaborative (constructive) transmissions, all
-              //        the messages are arriving at or near the same time. Destructive
-              //        transmission should be sent as multiple messages
-              if(locationPairInfoRet.second && !bHavePropagationDelay)
-                {
-                  if(locationPairInfoRet.first.getDistanceMeters() > 0.0)
-                    {
-                      propagation =
-                        Microseconds{static_cast<std::uint64_t>(std::round(locationPairInfoRet.first.getDistanceMeters() / SOL_MPS * 1000000))};
-                    }
-
-                  bHavePropagationDelay = true;
-                }
-            }
-          else
-            {
-              // drop due to GainManager not enough info
-              bDrop = true;
-
-              std::uint16_t u16Code{};
-
-              const char * pzReason{};
-
-              switch(gainInfodBi.second)
-                {
-                case GainManager::GainStatus::ERROR_LOCATIONINFO:
-                  pzReason = "missing location info";
-                  u16Code = DROP_CODE_GAINMANAGER_LOCATION;
-                  break;
-                case GainManager::GainStatus::ERROR_PROFILEINFO:
-                  pzReason = "missing profile info";
-                  u16Code = DROP_CODE_GAINMANAGER_ANTENNAPROFILE;
-                  break;
-                case GainManager::GainStatus::ERROR_HORIZON:
-                  pzReason = "below the horizon";
-                  u16Code = DROP_CODE_GAINMANAGER_HORIZON;
-                  break;
-                default:
-                  pzReason = "unknown";
-                  break;
-                }
-
-              commonLayerStatistics_.processOutbound(pkt,
-                                                     std::chrono::duration_cast<Microseconds>(Clock::now() - now),
-                                                     u16Code);
-
-              LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
-                                      DEBUG_LEVEL,
-                                      "PHYI %03hu SpectrumTools::MonitorPhy::%s transmitter %hu, src %hu, dst %hu, drop %s",
-                                      id_,
-                                      __func__,
-                                      transmitter.getNEMId(),
-                                      pktInfo.getSource(),
-                                      pktInfo.getDestination(),
-                                      pzReason);
-
-
-              break;
-            }
-        }
-      else
-        {
-          // drop due to PropagationModelAlgorithm not enough info
-          bDrop = true;
-
-          commonLayerStatistics_.processOutbound(pkt,
-                                                 std::chrono::duration_cast<Microseconds>(Clock::now() - now),
-                                                 DROP_CODE_PROPAGATIONMODEL);
-
-          LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
-                                  DEBUG_LEVEL,
-                                  "PHYI %03hu SpectrumTools::MonitorPhy::%s transmitter %hu, src %hu, dst %hu,"
-                                  " drop propagation model missing info",
-                                  id_,
-                                  __func__,
-                                  transmitter.getNEMId(),
-                                  pktInfo.getSource(),
-                                  pktInfo.getDestination());
-          break;
+          std::get<0>(iter->second) = commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz();
         }
     }
 
-  if(!bDrop)
+  Controls::AntennaReceiveInfos antennaReceiveInfos{};
+  std::set<TimePoint> mimoSoT{};
+  std::set<Microseconds> mimoPropagationDelay{};
+  std::vector<std::pair<LocationInfo,bool>> locationInfos{};
+  std::vector<std::pair<FadingInfo,bool>> fadingSelections{};
+
+  for(const auto & transmitter : commonPHYHeader.getTransmitters())
     {
-      try
+      locationInfos.push_back(locationManager_.getLocationInfo(transmitter.getNEMId()));
+
+      fadingSelections.push_back(fadingManager_.getFadingSelection(transmitter.getNEMId()));
+
+      for(const auto & txAntenna : commonPHYHeader.getTransmitAntennas())
         {
-          auto iter  = spectrumMap_.find(commonPHYHeader.getSubId());
-
-          if(iter == spectrumMap_.end())
-            {
-              iter = spectrumMap_.insert(std::make_pair(commonPHYHeader.getSubId(),
-                                                        std::make_tuple(commonPHYHeader.getBandwidthHz(),
-                                                                        std::unique_ptr<SpectrumMonitorAlt>(new SpectrumMonitorAlt(commonPHYHeader.getSubId(),
-                                                                                                                                   noiseBinSize_,
-                                                                                                                                   maxSegmentOffset_,
-                                                                                                                                   maxMessagePropagation_,
-                                                                                                                                   maxSegmentDuration_,
-                                                                                                                                   timeSyncThreshold_,
-                                                                                                                                   bNoiseMaxClamp_))))).first;
-            }
-          else
-            {
-              if(std::get<0>(iter->second) != commonPHYHeader.getBandwidthHz())
-                {
-                  std::get<0>(iter->second) = commonPHYHeader.getBandwidthHz();
-                }
-            }
-
-          std::get<1>(iter->second)->update(now,
-                                            commonPHYHeader.getTxTime(),
-                                            propagation,
-                                            frequencySegments,
-                                            commonPHYHeader.getBandwidthHz(),
-                                            rxPowerSegments,
-                                            transmitters);
+          antennaManager_.update(transmitter.getNEMId(),txAntenna);
         }
-      catch(SpectrumServiceException & exp)
-        {
-          commonLayerStatistics_.processOutbound(pkt,
-                                                 std::chrono::duration_cast<Microseconds>(Clock::now() - now),
-                                                 DROP_CODE_SPECTRUM_CLAMP);
+    }
 
+  auto result = std::get<2>(iter->second)->process(now,
+                                                   commonPHYHeader,
+                                                   locationInfos,
+                                                   fadingSelections,
+                                                   false);
+
+  if(result.status_ == ReceiveProcessorAlt::ProcessResult::Status::SUCCESS)
+    {
+      mimoSoT.insert(result.mimoSoT_);
+      mimoPropagationDelay.insert(result.mimoPropagationDelay_);
+
+      antennaReceiveInfos.insert(antennaReceiveInfos.end(),
+                                 std::make_move_iterator(result.antennaReceiveInfos_.begin()),
+                                 std::make_move_iterator(result.antennaReceiveInfos_.end()));
+      if(result.bGainCacheHit_)
+        {
+          ++*pGainCacheHit_;
+        }
+      else
+        {
+          ++*pGainCacheMiss_;
+        }
+
+      for(const auto & entry : result.receivePowerMap_)
+        {
+          receivePowerTablePublisher_.update(std::get<0>(entry.first),
+                                             std::get<1>(entry.first),
+                                             std::get<2>(entry.first),
+                                             std::get<3>(entry.first),
+                                             entry.second,
+                                             commonPHYHeader.getTxTime());
+        }
+    }
+  else
+    {
+      std::string sReason{"unknown"};
+      LogLevel logLevel{DEBUG_LEVEL};
+      bool bNoError{};
+
+      Microseconds processingDuration{std::chrono::duration_cast<Microseconds>(Clock::now() - now)};
+
+      switch(result.status_)
+        {
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_ANTENNA_FREQ_INDEX:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_ANTENNA_FREQ_INDEX);
+          sReason = "transmit antenna frequency index invalid";
+          logLevel = ERROR_LEVEL;
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_FADINGMANAGER_LOCATION:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_FADINGMANAGER_LOCATION);
+          sReason = "FadingManager missing location information";
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_FADINGMANAGER_ALGORITHM:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_FADINGMANAGER_ALGORITHM);
+
+          sReason = "FadingManager unknown algorithm";
+          logLevel = ERROR_LEVEL;
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_FADINGMANAGER_SELECTION:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_FADINGMANAGER_SELECTION);
+
+          sReason = "FadingManager unknown fading selection for transmitter";
+
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_GAINMANAGER_LOCATION:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_GAINMANAGER_LOCATION);
+
+          sReason = "GainManager missing location information";
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_GAINMANAGER_ANTENNAPROFILE:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_GAINMANAGER_ANTENNAPROFILE);
+          sReason = "GainManager unknown antenna profile";
+          logLevel = ERROR_LEVEL;
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_GAINMANAGER_HORIZON:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_GAINMANAGER_HORIZON);
+          sReason = "GainManager below horizon";
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_GAINMANAGER_ANTENNA_INDEX:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_GAINMANAGER_ANTENNA_INDEX);
+          sReason = "GainManager unknown antenna index";
+          logLevel = ERROR_LEVEL;
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_PROPAGATIONMODEL:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_PROPAGATIONMODEL);
+          sReason = "propagation model missing information";
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_SPECTRUM_CLAMP:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_SPECTRUM_CLAMP);
+          sReason = "SpectrumManager detected request range error";
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_NOT_FOI:
+          commonLayerStatistics_.processOutbound(pkt,
+                                                 processingDuration,
+                                                 DROP_CODE_NOT_FOI);
+          sReason = "message frequency not in frequency of interest list.";
+          break;
+
+        case ReceiveProcessorAlt::ProcessResult::Status::DROP_CODE_OUT_OF_BAND:
+          bNoError = true;
+          break;
+
+        default:
+          break;
+        }
+
+      if(!bNoError)
+        {
           LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
-                                  DEBUG_LEVEL,
-                                  "PHYI %03hu MonitorPhy::%s src %hu, dst %hu,"
-                                  " drop spectrum out of bound %s",
+                                  logLevel,
+                                  "PHYI %03hu MonitorPhy::%s "
+                                  " src %hu, dst %hu, drop %s",
                                   id_,
                                   __func__,
                                   pktInfo.getSource(),
                                   pktInfo.getDestination(),
-                                  exp.what());
+                                  sReason.c_str());
+
+          // drop
+          return;
         }
     }
 }
+
 
 void EMANE::SpectrumTools::MonitorPhy::processEvent(const EventId & eventId,
                                                     const Serialization & serialization)
 {
   LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
                           DEBUG_LEVEL,
-                          "PHYI %03hu SpectrumTools::MonitorPhy::%s event id: %hu",
+                          "PHYI %03hu MonitorPhy::%s event id: %hu",
                           id_,
                           __func__,
                           eventId);
@@ -884,13 +904,13 @@ void EMANE::SpectrumTools::MonitorPhy::processEvent(const EventId & eventId,
     case Events::AntennaProfileEvent::IDENTIFIER:
       {
         Events::AntennaProfileEvent antennaProfile{serialization};
-        gainManager_.update(antennaProfile.getAntennaProfiles());
+        antennaManager_.update(antennaProfile.getAntennaProfiles());
         eventTablePublisher_.update(antennaProfile.getAntennaProfiles());
 
         LOGGER_STANDARD_LOGGING_FN_VARGS(pPlatformService_->logService(),
                                          DEBUG_LEVEL,
                                          Events::AntennaProfileEventFormatter(antennaProfile),
-                                         "PHYI %03hu SpectrumTools::MonitorPhy::%s antenna profile event: ",
+                                         "PHYI %03hu MonitorPhy::%s antenna profile event: ",
                                          id_,
                                          __func__);
 
@@ -906,7 +926,7 @@ void EMANE::SpectrumTools::MonitorPhy::processEvent(const EventId & eventId,
         LOGGER_STANDARD_LOGGING_FN_VARGS(pPlatformService_->logService(),
                                          DEBUG_LEVEL,
                                          Events::FadingSelectionEventFormatter(fadingSelection),
-                                         "PHYI %03hu SpectrumTools::MonitorPhy::%s fading selection event: ",
+                                         "PHYI %03hu MonitorPhy::%s fading selection event: ",
                                          id_,
                                          __func__);
       }
@@ -921,7 +941,7 @@ void EMANE::SpectrumTools::MonitorPhy::processEvent(const EventId & eventId,
         LOGGER_STANDARD_LOGGING_FN_VARGS(pPlatformService_->logService(),
                                          DEBUG_LEVEL,
                                          Events::LocationEventFormatter(locationEvent),
-                                         "PHYI %03hu SpectrumTools::MonitorPhy::%s location event: ",
+                                         "PHYI %03hu MonitorPhy::%s location event: ",
                                          id_,
                                          __func__);
       }
@@ -936,7 +956,7 @@ void EMANE::SpectrumTools::MonitorPhy::processEvent(const EventId & eventId,
         LOGGER_STANDARD_LOGGING_FN_VARGS(pPlatformService_->logService(),
                                          DEBUG_LEVEL,
                                          Events::PathlossEventFormatter(pathlossEvent),
-                                         "PHYI %03hu SpectrumTools::MonitorPhy::%s pathloss event: ",
+                                         "PHYI %03hu MonitorPhy::%s pathloss event: ",
                                          id_,
                                          __func__);
       }
@@ -1059,5 +1079,6 @@ void EMANE::SpectrumTools::MonitorPhy::querySpectrumService()
                  getQueryTime(currentQueryIndex + 1));
     }
 }
+
 
 DECLARE_PHY_LAYER(EMANE::SpectrumTools::MonitorPhy);

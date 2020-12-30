@@ -50,6 +50,9 @@ namespace EMANE
 {
   namespace SpectrumTools
   {
+    using SpectrumUpdate =
+      std::tuple<TimePoint,Microseconds,Microseconds,FrequencySegments,bool,double>;
+
     class SpectrumMonitorAlt
     {
     public:
@@ -69,6 +72,18 @@ namespace EMANE
              std::uint64_t u64SegmentBandwidthHz,
              const std::vector<double> & rxPowersMilliWatt,
              const std::vector<NEMId> & transmitters);
+
+
+      SpectrumUpdate
+      update(const TimePoint & now,
+             const TimePoint & txTime,
+             const Microseconds & propagationDelay,
+             const FrequencySegments & segments,
+             std::uint64_t u64SegmentBandwidthHz,
+             const std::vector<double> & rxPowersMilliWatt,
+             const std::vector<NEMId> & transmitters,
+             AntennaIndex txAntennaIndex);
+
 
       FrequencySet getFrequencies() const;// override;
 
