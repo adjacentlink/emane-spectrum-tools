@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014,2016-2017,2019-2020 - Adjacent Link LLC,
+ * Copyright (c) 2013-2014,2016-2017,2019-2021 - Adjacent Link LLC,
  * Bridgewater, New Jersey
  * All rights reserved.
  *
@@ -763,7 +763,11 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                              std::get<1>(entry.first),
                                              std::get<2>(entry.first),
                                              std::get<3>(entry.first),
-                                             entry.second,
+                                             std::get<0>(entry.second),
+                                             std::get<1>(entry.second),
+                                             std::get<2>(entry.second),
+                                             std::get<3>(entry.second),
+                                             std::get<4>(entry.second),
                                              commonPHYHeader.getTxTime());
         }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 - Adjacent Link LLC, Bridgewater, New Jersey
+ * Copyright (c) 2020-2021 - Adjacent Link LLC, Bridgewater, New Jersey
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -88,7 +88,12 @@ namespace EMANE
                             AntennaIndex, // rx antena
                             AntennaIndex, // tx antenna
                             std::uint64_t>, // freq
-                 double> receivePowerMap_{};
+                 std::tuple<double, // rx power dBm
+                            double, // tx gain dBi
+                            double, // rx gain dBi
+                            double, // tx power
+                            double>> // pathloss
+        receivePowerMap_{};
 
         ProcessResult() = default;
 
