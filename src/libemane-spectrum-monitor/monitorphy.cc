@@ -768,6 +768,7 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                              std::get<2>(entry.second),
                                              std::get<3>(entry.second),
                                              std::get<4>(entry.second),
+                                             0,
                                              commonPHYHeader.getTxTime());
         }
     }
