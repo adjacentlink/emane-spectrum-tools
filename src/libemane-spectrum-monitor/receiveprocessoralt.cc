@@ -280,54 +280,6 @@ EMANE::SpectrumTools::ReceiveProcessorAlt::process(const TimePoint & now,
                                                            transmitters,
                                                            transmitAntenna.getIndex());
 
-          TimePoint sot{};
-          Microseconds propagationDelay{};
-          Microseconds span{};
-          FrequencySegments resultingFrequencySegments{};
-          bool bTreatAsInBand{};
-          double dReceiverSensitivityMilliWatt{};
-
-          std::tie(sot,
-                   propagationDelay,
-                   span,
-                   resultingFrequencySegments,
-                   bTreatAsInBand,
-                   dReceiverSensitivityMilliWatt) = spectrumInfo;
-
-          if(bTreatAsInBand)
-            {
-              if(!resultingFrequencySegments.empty())
-                {
-                  if(result.antennaReceiveInfos_.empty())
-                    {
-                      result.mimoSoT_ = sot;
-                      result.mimoPropagationDelay_ = propagationDelay;
-                    }
-                  else
-                    {
-                      if(result.mimoSoT_ != sot || result.mimoPropagationDelay_ != propagationDelay)
-                        {
-                          result.status_ = ProcessResult::Status::DROP_CODE_SPECTRUM_CLAMP;
-                          return result;
-                        }
-                    }
-
-                  result.antennaReceiveInfos_.emplace_back(rxAntennaIndex_,
-                                                           transmitAntenna.getIndex(),
-                                                           std::move(resultingFrequencySegments),
-                                                           span,
-                                                           Utils::MILLIWATT_TO_DB(dReceiverSensitivityMilliWatt));
-                }
-            }
-          else
-            {
-              // was this packet actually in-band, if so at least 1 freq was not in the foi
-              result.status_ = bInBand ?
-                ProcessResult::Status::DROP_CODE_NOT_FOI :
-                ProcessResult::Status::DROP_CODE_OUT_OF_BAND;
-
-              return result;
-            }
         }
       catch(SpectrumServiceException & exp)
         {

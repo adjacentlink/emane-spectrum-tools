@@ -716,9 +716,6 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
         }
     }
 
-  Controls::AntennaReceiveInfos antennaReceiveInfos{};
-  std::set<TimePoint> mimoSoT{};
-  std::set<Microseconds> mimoPropagationDelay{};
   std::vector<std::pair<LocationInfo,bool>> locationInfos{};
   std::vector<std::pair<FadingInfo,bool>> fadingSelections{};
 
@@ -742,12 +739,6 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
 
   if(result.status_ == ReceiveProcessorAlt::ProcessResult::Status::SUCCESS)
     {
-      mimoSoT.insert(result.mimoSoT_);
-      mimoPropagationDelay.insert(result.mimoPropagationDelay_);
-
-      antennaReceiveInfos.insert(antennaReceiveInfos.end(),
-                                 std::make_move_iterator(result.antennaReceiveInfos_.begin()),
-                                 std::make_move_iterator(result.antennaReceiveInfos_.end()));
       if(result.bGainCacheHit_)
         {
           ++*pGainCacheHit_;
