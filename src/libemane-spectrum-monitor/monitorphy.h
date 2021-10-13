@@ -37,14 +37,18 @@
 #include "emane/phylayerimpl.h"
 #include "emane/phytypes.h"
 #include "emane/utils/commonlayerstatistics.h"
+#include "emane/utils/processingpool.h"
 
 #include "locationmanager.h"
-#include "spectrummonitoralt.h"
+#include "spectrumservice.h"
 #include "gainmanager.h"
+#include "antennamanager.h"
 #include "propagationmodelalgorithm.h"
 #include "eventtablepublisher.h"
 #include "receivepowertablepublisher.h"
 #include "fadingmanager.h"
+#include "receiveprocessoralt.h"
+#include "spectrummonitoralt.h"
 
 #include <set>
 #include <cstdint>
@@ -79,6 +83,7 @@ namespace EMANE
                                  UpstreamPacket & pkt,
                                  const ControlMessages & msgs) override;
 
+      // provides test harness access
       void processUpstreamPacket_i(const TimePoint & now,
                                    const CommonPHYHeader & hdr,
                                    UpstreamPacket & pkt,
@@ -89,13 +94,24 @@ namespace EMANE
       void processDownstreamPacket(DownstreamPacket & pkt,
                                    const ControlMessages & msgs) override;
 
+      // provides test harness access
+      void processDownstreamPacket_i(const TimePoint & now,
+                                     DownstreamPacket & pkt,
+                                     const ControlMessages & msgs);
+
       void processEvent(const EventId & eventId,
                         const Serialization & serialization) override;
 
 
+      SpectrumMonitor & getSpectrumMonitor();
+
     private:
-      GainManager gainManager_;
+      SpectrumService * pSpectrumService_;
+      AntennaManager antennaManager_;
       LocationManager locationManager_;
+      std::uint64_t u64BandwidthHz_;
+      std::uint64_t u64RxCenterFrequencyHz_;
+      std::uint64_t u64SubbandBinSizeHz_;
       std::pair<double,bool> optionalFixedAntennaGaindBi_;
       std::unique_ptr<PropagationModelAlgorithm> pPropagationModelAlgorithm_;
       Utils::CommonLayerStatistics commonLayerStatistics_;
@@ -109,12 +125,25 @@ namespace EMANE
       bool bNoiseMaxClamp_;
       double dSystemNoiseFiguredB_;
       StatisticNumeric<std::uint64_t> * pTimeSyncThresholdRewrite_;
+      StatisticNumeric<std::uint64_t> * pGainCacheHit_;
+      StatisticNumeric<std::uint64_t> * pGainCacheMiss_;
       FadingManager fadingManager_;
       using SpectrumMap = std::map<std::uint16_t, // sub id
                                    std::tuple<std::uint64_t, // bandwidth hz
-                                              std::unique_ptr<SpectrumMonitorAlt>>>;
+                                              std::unique_ptr<SpectrumMonitorAlt>,
+                                              std::unique_ptr<ReceiveProcessorAlt>>>;
 
       SpectrumMap spectrumMap_;
+
+      enum class CompatibilityMode
+        {
+          MODE_1,
+          MODE_2,
+        };
+
+      CompatibilityMode compatibilityMode_;
+      bool bStatsReceivePowerTableEnable_;
+      bool bRxSensitivityPromiscuousModeEnable_;
       Microseconds spectrumQueryRate_;
       Microseconds spectrumQueryBinSize_;
       INETAddr spectrumQueryPublishAddr_;
@@ -123,14 +152,15 @@ namespace EMANE
       void * pZMQContext_;
       void * pZMQSocket_;
       std::uint64_t u64SequenceNumber_;
-      std::string sSpectrumQueryRecorderFile_;
-      std::fstream recorderFileStream_;
 
       void querySpectrumService();
 
       TimePoint getQueryTime(std::uint64_t u64QueryIndex);
 
       std::uint64_t getQueryIndex(const TimePoint & timePoint);
+
+      std::string sSpectrumQueryRecorderFile_;
+      std::fstream recorderFileStream_;
     };
   }
 }
