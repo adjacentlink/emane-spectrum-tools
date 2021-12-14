@@ -12,8 +12,7 @@ COPY --from=gcr.io/automated-builds-303920/centos7.emane /opt/built/* dependenci
 RUN yum -y install dependencies/*\.rpm
 
 # Build tools
-RUN yum -y install git gcc-c++ make autoconf automake libtool rpm-build
-RUN yum -y install libxml2-devel libpcap-devel pcre-devel libuuid-devel
+RUN yum -y install git gcc-c++ make autoconf automake libtool rpm-build zeromq-devel
 
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
 WORKDIR emane-spectrum-tools

@@ -16,8 +16,7 @@ RUN dpkg -i dependencies/*; apt-get -y -f install
 
 # Build tools and dependencies
 RUN apt-get -y install git gcc g++ autoconf automake libtool debhelper dh-python pkg-config python-setuptools \
-                       protobuf-compiler libprotobuf-dev python-protobuf
-RUN apt-get -y install libxml2-dev libpcap-dev libpcre3-dev uuid-dev
+                       python3-zmq libzmq5 libzmq3-dev
 
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
 
