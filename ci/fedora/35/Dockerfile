@@ -11,7 +11,9 @@ COPY --from=gcr.io/automated-builds-303920/fedora35.emane /opt/built/* dependenc
 RUN dnf -y install dependencies/*\.rpm
 
 # Build tools and depends
-RUN dnf -y install git gcc-c++ make autoconf automake libtool rpm-build zeromq-devel
+RUN dnf -y install git gcc-c++ make autoconf automake libtool rpm-build python3-setuptools \
+                   libxml2-devel libpcap-devel pcre-devel libuuid-devel python3-devel \
+                   python3-protobuf protobuf-devel zeromq-devel
 
 # Setup emane_SRC_ROOT environment variable
 RUN git clone https://github.com/adjacentlink/emane -b develop

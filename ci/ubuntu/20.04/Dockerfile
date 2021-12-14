@@ -15,7 +15,9 @@ COPY --from=gcr.io/automated-builds-303920/ubuntu20.04.emane /opt/built/* depend
 RUN dpkg -i dependencies/*; apt-get -y -f install
 
 # Build tools and dependencies
-RUN apt-get -y install git gcc g++ autoconf automake libtool debhelper dh-python pkg-config python-setuptools \
+RUN apt-get -y install git gcc g++ autoconf automake libtool dh-python  debhelper python3-setuptools \
+                       libxml2-dev libprotobuf-dev libpcap-dev libpcre3-dev uuid-dev pkg-config \
+                       python3-protobuf protobuf-compiler \
                        python3-zmq libzmq5 libzmq3-dev
 
 # Setup emane_SRC_ROOT environment variable

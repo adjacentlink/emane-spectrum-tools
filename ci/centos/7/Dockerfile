@@ -12,7 +12,9 @@ COPY --from=gcr.io/automated-builds-303920/centos7.emane /opt/built/* dependenci
 RUN yum -y install dependencies/*\.rpm
 
 # Build tools
-RUN yum -y install git gcc-c++ make autoconf automake libtool rpm-build zeromq-devel
+RUN yum -y install git gcc-c++ make autoconf automake libtool rpm-build python-setuptools \
+                   libxml2-devel libpcap-devel pcre-devel libuuid-devel python-devel \
+                   protobuf protobuf-devel protobuf-compiler protobuf-python zeromq-devel
 
 # Setup emane_SRC_ROOT environment variable
 RUN git clone https://github.com/adjacentlink/emane -b develop
