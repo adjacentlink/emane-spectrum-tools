@@ -18,6 +18,10 @@ RUN dpkg -i dependencies/*; apt-get -y -f install
 RUN apt-get -y install git gcc g++ autoconf automake libtool debhelper dh-python pkg-config python-setuptools \
                        python3-zmq libzmq5 libzmq3-dev
 
+# Setup emane_SRC_ROOT environment variable
+RUN git clone https://github.com/adjacentlink/emane -b develop
+ENV emane_SRC_ROOT=/opt/emane
+
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
 
 WORKDIR emane-spectrum-tools

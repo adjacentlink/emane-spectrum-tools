@@ -13,6 +13,10 @@ RUN dnf -y install dependencies/*\.rpm
 # Build tools and depends
 RUN dnf -y install git gcc-c++ make autoconf automake libtool rpm-build zeromq-devel
 
+# Setup emane_SRC_ROOT environment variable
+RUN git clone https://github.com/adjacentlink/emane -b develop
+ENV emane_SRC_ROOT=/opt/emane
+
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
 
 WORKDIR emane-spectrum-tools
