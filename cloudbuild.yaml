@@ -1,0 +1,8 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: [ 'build', '-t', 'gcr.io/$PROJECT_ID/$_BUILD_DISTRO$_DISTRO_VERSION.emane-spectrum-tools', 'ci/$_BUILD_DISTRO/$_DISTRO_VERSION' ]
+
+images:
+- 'gcr.io/$PROJECT_ID/$_BUILD_DISTRO$_DISTRO_VERSION.emane-spectrum-tools'
+
+timeout: 30m
