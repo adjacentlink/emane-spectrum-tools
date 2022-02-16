@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 - Adjacent Link LLC, Bridgewater, New Jersey
+ * Copyright (c) 2018-2021 - Adjacent Link LLC, Bridgewater, New Jersey
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -125,6 +125,7 @@ int main(int argc, char* argv[])
           {"stats.event.maxeventcountrows", 1, nullptr, 5},
           {"stats.ota.maxeventcountrows", 1, nullptr, 5},
           {"stats.ota.maxpacketcountrows", 1, nullptr, 5},
+          {"spectralmaskmanifesturi", 1, nullptr, 5},
           {nullptr, 0, nullptr, 0},
         };
 
@@ -187,6 +188,7 @@ int main(int argc, char* argv[])
               std::cout<<"  --otamanagerpartcheckthreshold VALUE **"<<std::endl;
               std::cout<<"  --otamanagerparttimeoutthreshold VALUE **"<<std::endl;
               std::cout<<"  --otamanagerttl VALUE **"<<std::endl;
+              std::cout<<"  --spectralmaskmanifesturi VALUE"<<std::endl;
               std::cout<<"  --stats.event.maxeventcountrows VALUE **"<<std::endl;
               std::cout<<"  --stats.ota.maxeventcountrows VALUE **"<<std::endl;
               std::cout<<"  --stats.ota.maxpacketcountrows VALUE **"<<std::endl;

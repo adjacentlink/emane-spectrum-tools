@@ -734,8 +734,7 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
   auto result = std::get<2>(iter->second)->process(now,
                                                    commonPHYHeader,
                                                    locationInfos,
-                                                   fadingSelections,
-                                                   false);
+                                                   fadingSelections);
 
   if(result.status_ == ReceiveProcessorAlt::ProcessResult::Status::SUCCESS)
     {

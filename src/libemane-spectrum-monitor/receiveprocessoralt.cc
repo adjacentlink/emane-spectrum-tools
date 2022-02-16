@@ -56,8 +56,7 @@ EMANE::SpectrumTools::ReceiveProcessorAlt::ProcessResult
 EMANE::SpectrumTools::ReceiveProcessorAlt::process(const TimePoint & now,
                                                    const CommonPHYHeader & commonPHYHeader,
                                                    const std::vector<std::pair<LocationInfo,bool>> & locationInfos,
-                                                   const std::vector<std::pair<FadingInfo,bool>> & fadingInfos,
-                                                   bool bInBand)
+                                                   const std::vector<std::pair<FadingInfo,bool>> & fadingInfos)
 {
   ProcessResult result{};
 
@@ -278,7 +277,8 @@ EMANE::SpectrumTools::ReceiveProcessorAlt::process(const TimePoint & now,
                                                            transmitAntenna.getBandwidthHz(),
                                                            rxPowerSegmentsMilliWatt,
                                                            transmitters,
-                                                           transmitAntenna.getIndex());
+                                                           transmitAntenna.getIndex(),
+                                                           transmitAntenna.getSpectralMaskIndex());
 
         }
       catch(SpectrumServiceException & exp)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014,2019-2020 - Adjacent Link LLC, Bridgewater,
+ * Copyright (c) 2013-2014,2019-2021 - Adjacent Link LLC, Bridgewater,
  * New Jersey
  * All rights reserved.
  *
@@ -64,16 +64,6 @@ namespace EMANE
                          const Microseconds & timeSyncThreshold,
                          bool bMaxClamp);
 
-      std::tuple<TimePoint,Microseconds,Microseconds,FrequencySegments,bool>
-      update(const TimePoint & now,
-             const TimePoint & txTime,
-             const Microseconds & propagationDelay,
-             const FrequencySegments & segments,
-             std::uint64_t u64SegmentBandwidthHz,
-             const std::vector<double> & rxPowersMilliWatt,
-             const std::vector<NEMId> & transmitters);
-
-
       SpectrumUpdate
       update(const TimePoint & now,
              const TimePoint & txTime,
@@ -82,7 +72,8 @@ namespace EMANE
              std::uint64_t u64SegmentBandwidthHz,
              const std::vector<double> & rxPowersMilliWatt,
              const std::vector<NEMId> & transmitters,
-             AntennaIndex txAntennaIndex);
+             AntennaIndex txAntennaIndex,
+             SpectralMaskIndex spectralMaskIndex);
 
 
       FrequencySet getFrequencies() const;// override;
