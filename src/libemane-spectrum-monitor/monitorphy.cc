@@ -233,6 +233,11 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
                                                {INETAddr{"0.0.0.0",8883}},
                                                "Spectrum Query ZMQ Pub socket endpoint.");
 
+  configRegistrar.registerNonNumeric<std::string>("spectrumquery.recorderfile",
+                                                  ConfigurationProperties::NONE,
+                                                  {},
+                                                  "Spectrum query measurement recorder file."); 
+
   configRegistrar.registerNumeric<bool>("stats.receivepowertableenable",
                                         EMANE::ConfigurationProperties::DEFAULT,
                                         {true},
