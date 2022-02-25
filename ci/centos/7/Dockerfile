@@ -22,9 +22,7 @@ ENV emane_SRC_ROOT=/opt/emane
 
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
 WORKDIR emane-spectrum-tools
-RUN ./autogen.sh
-RUN ./configure
-RUN make rpm
+RUN ./autogen.sh && ./configure && make rpm
 RUN cp $(find .rpmbuild/RPMS -name "*\.rpm") /opt/built
 RUN yum -y install /opt/built/*
 

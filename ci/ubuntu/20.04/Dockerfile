@@ -27,9 +27,7 @@ ENV emane_SRC_ROOT=/opt/emane
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
 
 WORKDIR emane-spectrum-tools
-RUN ./autogen.sh
-RUN ./configure
-RUN make deb
+RUN ./autogen.sh && ./configure && make deb
 RUN cp $(find .debbuild -name "*\.deb") /opt/built
 RUN dpkg -i /opt/built/*; apt-get -y install -f
 
