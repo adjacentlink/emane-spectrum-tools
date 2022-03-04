@@ -125,6 +125,10 @@ AM_CONDITIONAL(HAVE_RPMBUILD,$HAVE_RPMBUILD)
 AC_CHECK_PROG(HAVE_DEB, dh_clean, true, false)
 AM_CONDITIONAL(HAVE_DEB,$HAVE_DEB)
 
+# check for pandoc
+AC_CHECK_PROG(HAVE_PANDOC, pandoc, true, false)
+AM_CONDITIONAL(HAVE_PANDOC,$HAVE_PANDOC)
+
 AC_CHECK_FILE(/etc/debian_version,[DEBIAN_VERSION=`cat /etc/debian_version | awk -F/ '{print $1}'`],)
 AC_SUBST(DEBIAN_VERSION)
 
@@ -135,6 +139,8 @@ AC_OUTPUT(
  Makefile
  src/Makefile
  src/emane-spectrum-monitor/Makefile
+ src/emane-spectrum-ota-recorder/Makefile
  src/libemane-spectrum-monitor/Makefile
  src/python/Makefile
+ doc/Makefile
 )

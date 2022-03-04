@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014,2016-2017,2019-2021 - Adjacent Link LLC,
+ * Copyright (c) 2013-2014,2016-2017,2019-2022 - Adjacent Link LLC,
  * Bridgewater, New Jersey
  * All rights reserved.
  *
@@ -236,7 +236,7 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
   configRegistrar.registerNonNumeric<std::string>("spectrumquery.recorderfile",
                                                   ConfigurationProperties::NONE,
                                                   {},
-                                                  "Spectrum query measurement recorder file."); 
+                                                  "Spectrum query measurement recorder file.");
 
   configRegistrar.registerNumeric<bool>("stats.receivepowertableenable",
                                         EMANE::ConfigurationProperties::DEFAULT,
@@ -701,7 +701,9 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
 
       iter =
         spectrumMap_.insert(std::make_pair(commonPHYHeader.getSubId(),
-                                           std::make_tuple(commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz(),
+                                           std::make_tuple(commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz() ?
+                                                           commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz() :
+                                                           SpectralMaskManager::instance()->getPrimarySignalBandwidth(commonPHYHeader.getTransmitAntennas()[0].getSpectralMaskIndex()),
                                                            std::unique_ptr<SpectrumMonitorAlt>(pSpectrumMonitorAlt),
                                                            std::unique_ptr<ReceiveProcessorAlt>(new ReceiveProcessorAlt{id_,
                                                                                                                         0,
@@ -715,9 +717,13 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
     }
   else
     {
-      if(std::get<0>(iter->second) != commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz())
+      std::uint64_t u64BandwidthHz = commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz() ?
+        commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz() :
+        SpectralMaskManager::instance()->getPrimarySignalBandwidth(commonPHYHeader.getTransmitAntennas()[0].getSpectralMaskIndex());
+
+      if(std::get<0>(iter->second) != u64BandwidthHz)
         {
-          std::get<0>(iter->second) = commonPHYHeader.getTransmitAntennas()[0].getBandwidthHz();
+          std::get<0>(iter->second) = u64BandwidthHz;
         }
     }
 
@@ -1032,6 +1038,66 @@ void EMANE::SpectrumTools::MonitorPhy::querySpectrumService()
                   pEnergy->add_energy_mw(maxNoiseBin(window,
                                                      startTime + spectrumQueryBinSize_ * i,
                                                      startTime + spectrumQueryBinSize_ * (i + 1) - Microseconds{1}));
+                }
+            }
+        }
+
+      const auto & localPOV = locationManager_.getLocalPOV();
+
+
+      if(localPOV.isValid())
+        {
+          const auto & position = localPOV.getPosition();
+
+          auto * pPOV = msg.mutable_pov();
+
+          auto * pPosition = pPOV->mutable_position();
+          pPosition->set_latitude_degrees(position.getLatitudeDegrees());
+          pPosition->set_longitude_degrees(position.getLongitudeDegrees());
+          pPosition->set_altitude_meters(position.getAltitudeMeters());
+
+          auto orientation = localPOV.getOrientation();
+
+          if(orientation.second)
+            {
+              auto * pOrientation = pPOV->mutable_orientation();
+              pOrientation->set_roll_degrees(orientation.first.getRollDegrees());
+              pOrientation->set_pitch_degrees(orientation.first.getPitchDegrees());
+              pOrientation->set_yaw_degrees(orientation.first.getYawDegrees());
+            }
+
+          auto velocity = localPOV.getVelocity();
+
+          if(velocity.second)
+            {
+              auto * pVelocity = pPOV->mutable_velocity();
+              pVelocity->set_azimuth_degrees(velocity.first.getAzimuthDegrees());
+              pVelocity->set_elevation_degrees(velocity.first.getElevationDegrees());
+              pVelocity->set_magnitude_meters_per_second(velocity.first.getMagnitudeMetersPerSecond());
+            }
+        }
+
+      auto pAntenna = msg.mutable_antenna();
+
+      if(optionalFixedAntennaGaindBi_.second)
+        {
+          pAntenna->set_fixed_gain_dbi(optionalFixedAntennaGaindBi_.first);
+        }
+      else
+        {
+          auto receiverAntennaInfo = antennaManager_.getAntennaInfo(id_,DEFAULT_ANTENNA_INDEX);
+
+          if(receiverAntennaInfo.second)
+            {
+              auto pointing = receiverAntennaInfo.first.antenna_.getPointing();
+
+              if(pointing.second)
+                {
+                  auto pPointing = pAntenna->mutable_pointing();
+
+                  pPointing->set_profile_id(pointing.first.getProfileId());
+                  pPointing->set_azimuth_degrees(pointing.first.getAzimuthDegrees());
+                  pPointing->set_elevation_degrees(pointing.first.getElevationDegrees());
                 }
             }
         }

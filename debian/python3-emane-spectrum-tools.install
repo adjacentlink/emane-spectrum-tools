@@ -1,2 +1,4 @@
 usr/lib/python3.*/*-packages/*
 usr/bin/emane-spectrum-analyzer*
+usr/bin/emane-spectrum-energy-recording-tool*
+usr/bin/emane-spectrum-ota-record-tool*

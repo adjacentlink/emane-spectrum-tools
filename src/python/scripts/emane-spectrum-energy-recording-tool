@@ -1,0 +1,314 @@
+#!/usr/bin/env python
+# Copyright (c) 2022 - Adjacent Link LLC, Bridgewater, New Jersey
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+#  * Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#  * Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in
+#    the documentation and/or other materials provided with the
+#    distribution.
+#  * Neither the name of Adjacent Link LLC nor the names of its
+#    contributors may be used to endorse or promote products derived
+#    from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+# See toplevel COPYING for more information.
+#
+
+from __future__ import absolute_import, division, print_function
+
+import sys
+import struct
+import sqlite3
+from argparse import ArgumentParser
+from collections import namedtuple
+from collections import defaultdict
+import os
+import six
+
+import emane_spectrum_tools.interface.spectrummonitor_pb2 as spectrummonitor_pb2
+
+def display_progress(label,ratio):
+    #https://stackoverflow.com/a/3173331
+    six.print_("\r{}: [{:20s}] {:.1f}%".format(label,'#' * int(ratio * 20), ratio*100), end="", flush=True)
+    if ratio == 1:
+        print()
+
+argument_parser = ArgumentParser()
+
+argument_parser.add_argument('input-energy-file',
+                             type=str,
+                             help='read input from specified file')
+
+argument_parser.add_argument('output-file',
+                             type=str,
+                             help='write output to specified file')
+
+argument_parser.add_argument('--no-progress',
+                             action='store_true',
+                             help='do not show progress [default: %(default)s]')
+
+argument_parser.add_argument('-f',
+                             '--format',
+                             choices=['csv', 'sqlitedb'],
+                             default='csv',
+                             help='output format [default: %(default)s]')
+
+ns = argument_parser.parse_args()
+
+args = vars(ns)
+
+total_input_bytes = 0
+
+if args['input-energy-file'] != '-':
+    ifd = open( args['input-energy-file'],'rb')
+    total_input_bytes = os.stat(args['input-energy-file']).st_size
+else:
+    if six.PY2:
+        ifd = sys.stdin
+        args['no_progress'] = True
+    else:
+      ifd = sys.stdin.buffer
+
+if args['format'] == 'csv':
+    format_nan = ''
+
+    if args['output-file'] != '-':
+        ofd = open(args['output-file'],'w')
+    else:
+        ofd = sys.stdout
+        args['no_progress'] = True
+
+elif  args['format'] == 'sqlitedb':
+    format_nan = None
+
+    if args['output-file'] == '-':
+        print('outfile-file not valid for format:',args['out-file'],file=sys.stderr)
+        exit(1)
+
+    connection = sqlite3.connect(args['output-file'])
+
+    connection.execute("PRAGMA synchronous = 0;");
+    connection.execute("DROP TABLE IF EXISTS energy;")
+
+else:
+    print("unknown format:",args['format'],file=sys.stderr)
+    exit(1)
+
+db_insert = ''
+has_been_setup = False
+
+def setup(bin_count):
+    global db_insert
+    if args['format'] == 'csv':
+        print('start_time',
+              'duration',
+              'sequence',
+              'phy_sub_id',
+              'bandwidth_hz',
+              'frequency_hz',
+              'fixed_gain_dbi',
+              'antenna_profile_id',
+              'antenna_azimuth',
+              'antenna_elevation',
+              'latitude_degrees',
+              'longitude_degrees',
+              'altitude_meters',
+              'azimuth_degrees',
+              'elevation_degrees',
+              'magnitude_meters_per_second',
+              'roll_degrees',
+              'pitch_degrees',
+              'yaw_degrees',
+              *['bin_{}'.format(x) for x in range(0,bin_count)],
+              sep=',',
+              file=ofd)
+
+    elif  args['format'] == 'sqlitedb':
+        connection.execute('CREATE TABLE energy'
+                           ' (start_time INT,'
+                           ' duration INT,'
+                           ' sequence INT,'
+                           ' phy_sub_id INT,'
+                           ' bandwidth_hz INT,'
+                           ' frequency_hz INT,'
+                           ' fixed_gain_dbi DOUBLE,'
+                           ' antenna_profile_id INT,'
+                           ' antenna_azimuth DOUBLE,'
+                           ' antenna_elevation DOUBLE,'
+                           ' latitude_degrees DOUBLE,'
+                           ' longitude_degrees DOUBLE,'
+                           ' altitude_meters DOUBLE,'
+                           ' azimuth_degrees DOUBLE,'
+                           ' elevation_degrees DOUBLE,'
+                           ' magnitude_meters_per_second DOUBLE,'
+                           ' roll_degrees DOUBLE,'
+                           ' pitch_degrees DOUBLE,'
+                           ' yaw_degrees DOUBLE,' +
+                           ','.join([' bin_{} DOUBLE'.format(x) for x in range(0,bin_count)]) +
+                           ', PRIMARY KEY (start_time,sequence,phy_sub_id,frequency_hz));')
+
+        db_insert = 'INSERT INTO energy VALUES ({})'.format(','.join(['?'] * (bin_count + 19)))
+
+try:
+    total_read_bytes = 0
+
+    run = True
+
+    while run:
+        data=b''
+
+        if not args['no_progress']:
+            display_progress("output creation",total_read_bytes/total_input_bytes)
+
+        while len(data) != 4:
+            val = ifd.read(4-len(data))
+            if len(val):
+                data += val;
+            else:
+                run = False
+                break
+
+        if not run:
+            break
+
+        total_read_bytes += 4
+
+        msg_length, = struct.unpack('!L',data);
+
+        data = b''
+
+        while(len(data) != msg_length):
+            val = ifd.read(msg_length-len(data));
+            if len(val):
+                data += val;
+            else:
+                run = False
+                break
+
+        if not run:
+            break
+
+        total_read_bytes +=  msg_length
+
+        record = spectrummonitor_pb2.SpectrumEnergy()
+
+        record.ParseFromString(data)
+
+        if record.antenna.HasField('fixed_gain_dbi'):
+            fixed_gain_dBi = record.antenna.fixed_gain_dbi
+        else:
+            fixed_gain_dBi = format_nan
+
+        if record.antenna.HasField('pointing'):
+            antenna_profile_id = record.antenna.pointing.profile_id
+            antenna_azimuth = record.antenna.pointing.azimuth_degrees
+            antenna_elevation = record.antenna.pointing.elevation_degrees
+        else:
+            antenna_profile_id = format_nan
+            antenna_azimuth = format_nan
+            antenna_elevation = format_nan
+
+        if record.HasField('pov'):
+            latitude_degrees = record.pov.position.latitude_degrees
+            longitude_degrees = record.pov.position.longitude_degrees
+            altitude_meters = record.pov.position.altitude_meters
+        else:
+            latitude_degrees = format_nan
+            longitude_degrees = format_nan
+            altitude_meters = format_nan
+
+            if record.pov.HasField('orientation'):
+                roll_degrees = record.pov.orientation.roll_degrees
+                pitch_degrees = record.pov.orientation.pitch_degrees
+                yaw_degrees = record.pov.orientation.yaw_degrees
+            else:
+                roll_degrees = format_nan
+                pitch_degrees = format_nan
+                yaw_degrees = format_nan
+
+            if record.pov.HasField('velocity'):
+                azimuth_degrees = record.pov.velocity.azimuth_degrees
+                elevation_degrees = record.pov.velocity.elevation_degrees
+                magnitude_meters_per_second = record.pov.velocity.magnitude_meters_per_second
+            else:
+                azimuth_degrees = format_nan
+                elevation_degrees = format_nan
+                magnitude_meters_per_second = format_nan
+
+        for entry in record.entries:
+            for energy in entry.energies:
+                if not has_been_setup and energy.energy_mW:
+                    setup(len(energy.energy_mW))
+                    has_been_setup = True
+
+                if args['format'] == 'csv':
+                    print(record.start_time,
+                          record.duration,
+                          record.sequence,
+                          entry.subid,
+                          entry.bandwidth_hz,
+                          energy.frequency_hz,
+                          fixed_gain_dBi,
+                          antenna_profile_id,
+                          antenna_azimuth,
+                          antenna_elevation,
+                          latitude_degrees,
+                          longitude_degrees,
+                          altitude_meters,
+                          roll_degrees,
+                          pitch_degrees,
+                          yaw_degrees,
+                          azimuth_degrees,
+                          elevation_degrees,
+                          magnitude_meters_per_second,
+                          *energy.energy_mW,
+                          sep=',',
+                          file=ofd)
+                else:
+                    connection.execute(db_insert,
+                                       (record.start_time,
+                                        record.duration,
+                                        record.sequence,
+                                        entry.subid,
+                                        entry.bandwidth_hz,
+                                        energy.frequency_hz,
+                                        fixed_gain_dBi,
+                                        antenna_profile_id,
+                                        antenna_azimuth,
+                                        antenna_elevation,
+                                        latitude_degrees,
+                                        longitude_degrees,
+                                        altitude_meters,
+                                        roll_degrees,
+                                        pitch_degrees,
+                                        yaw_degrees,
+                                        azimuth_degrees,
+                                        elevation_degrees,
+                                        magnitude_meters_per_second) +
+                                       tuple(energy.energy_mW))
+
+
+                    connection.commit()
+
+except KeyboardInterrupt:
+  pass
+
+print(file=sys.stderr)

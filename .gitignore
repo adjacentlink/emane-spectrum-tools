@@ -47,6 +47,7 @@ src/python/.installedfiles
 
 # applications
 src/emane-spectrum-monitor/emane-spectrum-monitor
+src/emane-spectrum-ota-recorder/emane-spectrum-ota-recorder
 
 # rpm
 .rpmbuild
@@ -54,3 +55,7 @@ emane-spectrum-tools.spec
 
 # deb
 .debbuild
+
+# doc
+doc/emane-spectrum-tools-ota-record.pdf
+doc/emane-spectrum-tools-monitor.pdf

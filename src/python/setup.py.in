@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(name='emane_spectrum_tools',
       version='@VERSION@',
@@ -10,7 +10,9 @@ setup(name='emane_spectrum_tools',
       packages=['emane_spectrum_tools',
                 'emane_spectrum_tools.interface',
                 'emane_spectrum_tools.streamer'],
-      scripts=['scripts/emane-spectrum-analyzer'],
+      scripts=['scripts/emane-spectrum-analyzer',
+               'scripts/emane-spectrum-ota-record-tool',
+               'scripts/emane-spectrum-energy-recording-tool'],
       license = 'BSD'
       )
 

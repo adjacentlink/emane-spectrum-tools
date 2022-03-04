@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 - Adjacent Link LLC, Bridgewater, New Jersey
+ * Copyright (c) 2022 - Adjacent Link LLC, Bridgewater, New Jersey
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,72 +30,37 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-syntax = "proto2";
+#include "eventextractor.h"
+#include "emane/types.h"
+#include "emane/net.h"
 
-package EMANESpectrumMonitor;
-
-option optimize_for = SPEED;
-
-message SpectrumEnergy
+EMANE::SpectrumTools::Recorder::Records
+EMANE::SpectrumTools::Recorder::EventExtractor::process(const void * buf, size_t len)
 {
-  message POV
-  {
-    message Position
+  auto now = Clock::now();
+
+  Records records{};
+
+  if(static_cast<size_t>(len) >= sizeof(std::uint16_t))
     {
-      required double latitude_degrees = 1;
-      required double longitude_degrees = 2;
-      required double altitude_meters = 3;
+      std::uint16_t u16EventLength =
+        EMANE::NTOHS(*reinterpret_cast<const std::uint16_t *>(buf));
+
+      len -= sizeof(std::uint16_t);
+
+      if(len == u16EventLength)
+        {
+          EMANESpectrumTools::Record record{};
+          record.set_type(EMANESpectrumTools::Record::TYPE_EVENT);
+          record.set_timestamp(std::chrono::duration_cast<EMANE::Microseconds>(now.time_since_epoch()).count());
+
+          auto pEvent = record.mutable_event();
+
+          pEvent->set_event_data(reinterpret_cast<const char *>(buf) + 2,u16EventLength);
+
+          records.emplace_back(std::move(record));
+        }
     }
 
-    message Orientation
-    {
-      required double roll_degrees = 1;
-      required double pitch_degrees = 2;
-      required double yaw_degrees = 3;
-    }
-
-    message Velocity
-    {
-      required double azimuth_degrees = 1;
-      required double elevation_degrees = 2;
-      required double magnitude_meters_per_second = 3;
-    }
-
-    required Position position = 1;
-    optional Orientation orientation = 2;
-    optional Velocity velocity = 3;
-  }
-
-  message Antenna
-  {
-    message Pointing
-    {
-      required uint32 profile_id = 1;
-      required double azimuth_degrees = 2;
-      required double elevation_degrees = 3;
-    }
-
-    optional double fixed_gain_dbi = 1;
-    optional Pointing pointing = 2;
-  }
-
-  message Entry
-  {
-    message Energy
-    {
-      required uint64 frequency_hz = 1;
-      repeated double energy_mW = 2;
-    }
-
-    required uint32 subid = 1;
-    required uint64 bandwidth_hz = 2;
-    repeated Energy energies = 3;
-  }
-
-  required uint64 start_time = 1;
-  required uint64 duration = 2;
-  required uint64 sequence = 3;
-  repeated Entry entries = 4;
-  required Antenna antenna = 5;
-  optional POV pov = 6;
+  return records;
 }
