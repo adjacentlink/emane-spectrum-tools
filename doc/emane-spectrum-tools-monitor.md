@@ -1,29 +1,3 @@
----
-title: |
-    | EMANE Spectrum Tools
-    | Monitor
-    | Data Description
-geometry: margin=1in
-header-includes:
-    - \usepackage{fancyhdr}
-    - \pagestyle{fancy}
-    - \usepackage{relsize}
-    - \renewcommand{\_}{\textscale{.7}{\textunderscore}}
----
-
-\begin{center}
-\normalsize
-\vspace{-.7cm}
-Adjacent Link LLC\\
-Bridgewater, NJ 08807\\
-\url{http://adjacentlink.com}
-
-\vspace{.5cm}
-Revision 1.0
-\end{center}
-
-\vspace{.5cm}
-
 Copyright (c) 2022 - Adjacent Link LLC, Bridgewater, New Jersey  
 This work is licensed under [Creative Commons Attribution 4.0 International License][1].
 
@@ -32,17 +6,17 @@ This work is licensed under [Creative Commons Attribution 4.0 International Lice
 # Overview 
 
 This document describes the output and formats for
-\texttt{emane-spectrum-monitor} data.
+`emane-spectrum-monitor` data.
 
 # emane-spectrum-monitor
 
-The \texttt{emane-spectrum-monitor} is a monitoring (receive only)
-EMANE NEM instance that publishes and optionally records over-the-air
-energy as seen at the receiver.
+The `emane-spectrum-monitor` is a monitoring (receive only) EMANE NEM
+instance that publishes and optionally records over-the-air energy as
+seen at the receiver.
 
 \bigskip
 \footnotesize
-```{.bash}
+```bash
 $ emane-spectrum-monitor
     --realtime \
     --daemonize \
@@ -52,18 +26,18 @@ $ emane-spectrum-monitor
     --spectrumquery.recorderfile /tmp/emane-spectrum-monitor.data
 ```
 \vspace{-.2cm}
-Sample \texttt{emane-spectrum-monitor} command line.
+Sample `emane-spectrum-monitor` command line.
 \normalsize
 
-\texttt{emane-spectrum-monitor} data are stored as length prefix
-framed serialized \texttt{SpectrumEnergy} messages defined using a
-Google Protocol Buffer specification, where each serialized message is
-preceded by its length as an unsigned 32-bit integer value (4 bytes)
-in network byte order.
+`emane-spectrum-monitor` data are stored as length prefix framed
+serialized `SpectrumEnergy` messages defined using a Google Protocol
+Buffer specification, where each serialized message is preceded by its
+length as an unsigned 32-bit integer value (4 bytes) in network byte
+order.
 
 \bigskip
 \footnotesize
-```{.proto}
+```proto
 syntax = "proto2";
 
 package EMANESpectrumMonitor;
@@ -135,7 +109,7 @@ message SpectrumEnergy
 }
 ```
 \vspace{-.2cm}
-\texttt{emane-spectrum-tools/src/libemane-spectrum-monitor/spectrummonitor.proto}
+`emane-spectrum-tools/src/libemane-spectrum-monitor/spectrummonitor.proto`
 \normalsize
 
 1. `start_time`: Specifies the start time of the energy measurement in
@@ -156,8 +130,8 @@ message SpectrumEnergy
    Each time bin is `bandwidth_hz` wide with time boundaries that
    equally subdivide the time interval `start_time` to `start_time` +
    `duration`. The number of bins is defined via
-   \texttt{emane\-spectrum\-monitor} configuration and defaults to 10
-   bins every 100msec (10ms bin duration).
+   `emane-spectrum-monitor` configuration and defaults to 10 bins
+   every 100msec (10ms bin duration).
    
 5. `antenna`: Receive antenna information.
 
@@ -214,89 +188,88 @@ message SpectrumEnergy
 
 # emane-spectrum-energy-recording-tool
 
-The \texttt{emane-spectrum-energy-recording-tool} converts an
-\texttt{emane-\-spectrum-\-monitor} data file into a long format tidy
-data set as either a CSV or [SQLite][2] database file. Both output
-formats contain the same information. Each energy measurement is
-converted into multiple row entries (long format), where each row
-contains the center frequency and time binned energy measurements
-uniquely identified by \texttt{start\_time}, \texttt{sequence},
-\texttt{phy\_sub\_id}, and \texttt{frequency\_hz}.
+The `emane-spectrum-energy-recording-tool` converts an
+`emane-spectrum-monitor` data file into a long format tidy data set as
+either a CSV or [SQLite][2] database file. Both output formats contain
+the same information. Each energy measurement is converted into
+multiple row entries (long format), where each row contains the center
+frequency and time binned energy measurements uniquely identified by
+`start_time`, `sequence`, `phy_sub_id`, and `frequency_hz`.
 
-1. `start_time`: (\texttt{INT}) Specifies the start time of the energy
+1. `start_time`: (`INT`) Specifies the start time of the energy
    measurement in microseconds since the epoch (1970-01-01 UTC).
 
-2. `duration`: (\texttt{INT}) Specifies the duration of the energy
+2. `duration`: (`INT`) Specifies the duration of the energy
    measurement in microseconds.
 
-3. `sequence`: (\texttt{INT}) Unique monitoring NEM sequence number
+3. `sequence`: (`INT`) Unique monitoring NEM sequence number
    for the energy measurement.
 
-4. `phy_sub_id`: (\texttt{INT}) Used to differentiate between emulator
+4. `phy_sub_id`: (`INT`) Used to differentiate between emulator
    physical layer instances for different waveforms.
 
-5. `bandwidth_hz`: (\texttt{INT}) Transmitter bandwidth in Hz.
+5. `bandwidth_hz`: (`INT`) Transmitter bandwidth in Hz.
 
-6. `frequency_hz`: (\texttt{INT}) Transmitter center frequency in Hz.
+6. `frequency_hz`: (`INT`) Transmitter center frequency in Hz.
 
-7. `fixed_gain_dbi`: (\texttt{DOUBLE}) Fixed transmit antenna gain in
+7. `fixed_gain_dbi`: (`DOUBLE`) Fixed transmit antenna gain in
     dBi (ideal omni). Optional and present only when profile defined
     antenna information: `antenna_profile_id`, `antenna_azimuth`, and
     `antenna_elevation` are not.
 
-8. `antenna_profile_id`: (\texttt{INT}) Receive antenna profile
+8. `antenna_profile_id`: (`INT`) Receive antenna profile
     id. Optional and only present when `fixed_gain_dbi` is not.
 
-9. `antenna_azimuth`: (\texttt{DOUBLE}) Profile defined antenna
+9. `antenna_azimuth`: (`DOUBLE`) Profile defined antenna
     pointing information. Optional and only present when
     `fixed_gain_dbi` is not.
 
-10. `antenna_elevation`: (\texttt{DOUBLE}) Profile defined antenna
+10. `antenna_elevation`: (`DOUBLE`) Profile defined antenna
     pointing information. Optional and only present when
     `fixed_gain_dbi` is not.
 
-11. `latitude_degrees`: (\texttt{DOUBLE}) Monitoring NEM's latitude in
+11. `latitude_degrees`: (`DOUBLE`) Monitoring NEM's latitude in
     degrees. Optional and only present when location events are
     published.
 
-12. `longitude_degrees`: (\texttt{DOUBLE}) Monitoring NEM's longitude
+12. `longitude_degrees`: (`DOUBLE`) Monitoring NEM's longitude
     in degrees. Optional and only present when location events are
     published.
 
-13. `altitude_meters`: (\texttt{DOUBLE}) Monitoring NEM's altitude in
+13. `altitude_meters`: (`DOUBLE`) Monitoring NEM's altitude in
     meters. Optional and only present when location events are
     published.
 
-14. `azimuth_degrees`: (\texttt{DOUBLE}) Monitoring NEM's velocity
+14. `azimuth_degrees`: (`DOUBLE`) Monitoring NEM's velocity
     azimuth in degrees. Optional and only present when location events
     containing velocity are published.
 
-15. `elevation_degree`: (\texttt{DOUBLE}) Monitoring NEM's velocity
+15. `elevation_degree`: (`DOUBLE`) Monitoring NEM's velocity
     elevation in degrees. Optional and only present when location
     events containing velocity are published.
 
-16. `magnitude_meters_per_second`: (\texttt{DOUBLE}) Monitoring NEM's
+16. `magnitude_meters_per_second`: (`DOUBLE`) Monitoring NEM's
     velocity magnitude in meters per second. Optional and only present
     when location events containing velocity are published.
 
-17. `roll_degrees`: (\texttt{DOUBLE}) Monitoring NEM's orientation
+17. `roll_degrees`: (`DOUBLE`) Monitoring NEM's orientation
     roll in degrees. Optional and only present when location events
     containing orientation are published.
 
-18. `pitch_degrees`: (\texttt{DOUBLE}) Monitoring NEM's orientation
+18. `pitch_degrees`: (`DOUBLE`) Monitoring NEM's orientation
     pitch in degrees. Optional and only present when location events
     containing oricentation are published.
 
-19. `yaw_degrees`: (\texttt{DOUBLE}) Monitoring NEM's orientation yaw
+19. `yaw_degrees`: (`DOUBLE`) Monitoring NEM's orientation yaw
     in degrees. Optional and only present when location events
     containing oricentation are published.
 
-20. `bin_0` - `bin_N`: (\texttt{DOUBLE}) Time binned receive energy in
+20. `bin_0` - `bin_N`: (`DOUBLE`) Time binned receive energy in
     mW. Each bin is `bandwidth_hz` wide with time boundaries that
     equally subdivide the time interval `start_time` to `start_time` +
     `duration`. The number of bins is defined via
-    \texttt{emane\-spectrum\-monitor} configuration and defaults to 10
-    bins every 100msec (10ms bin duration).
+    `emane-spectrum-monitor` configuration and defaults to 10 bins
+    every 100msec (10ms bin duration).
 
 More information on [platform orientation][3] and [profile defined
 antennas][4] can be found on the EMANE Wiki.
@@ -308,7 +281,7 @@ antennas][4] can be found on the EMANE Wiki.
 
 \bigskip
 \footnotesize
-```{.sql}
+```sql
 CREATE TABLE energy (start_time INT,
                      duration INT,
                      sequence INT,
@@ -341,22 +314,22 @@ CREATE TABLE energy (start_time INT,
                      PRIMARY KEY (start_time,sequence,phy_sub_id,frequency_hz));
 ```
 \vspace{-.2cm}
-SQLite schema used by \texttt{emane-spectrum-monitor}.
+SQLite schema used by `emane-spectrum-monitor`.
 \normalsize
 
 # Limitations
 
-The following are known limitations of the \texttt{emane-spectrum-monitor}:
+The following are known limitations of the `emane-spectrum-monitor`:
 
 1. All emulator physical instances using the same subid must have the
    same transmit bandwidth in order for reported
-   \texttt{emane-spectrum-monitor} data to convey the correct
+   `emane-spectrum-monitor` data to convey the correct
    bandwidth. It is valid to use any combination of physical instances
    with the same subid using different spectral masks, including the
    default square mask, provided that the width of the primary signal
    is the same for all.
    
-2. The \texttt{emane-spectrum-monitor} auto discovers and reports
+2. The `emane-spectrum-monitor` auto discovers and reports
    energy based on the center frequency of the transmitter's primary
    signal. Any spurs defined via spectral masks are not reported,
    however any spur energy that contributes within a primary signal's

@@ -1,5 +1,7 @@
 EXTRA_DIST = \
  $(MARKDOWN) \
+ emane-spectrum-tools-ota-record.header \
+ emane-spectrum-tools-monitor.header \
  pygments.theme
 
 MARKDOWN = \
@@ -13,9 +15,9 @@ if HAVE_PANDOC
 
 all: $(PDFS)
 
-%.pdf: %.md
+%.pdf: %.header %.md
 	pandoc \
-	 $< \
+	 $^ \
 	 --number-sections \
 	 --highlight-style pygments.theme \
 	 -f markdown+raw_tex+header_attributes+multiline_tables \

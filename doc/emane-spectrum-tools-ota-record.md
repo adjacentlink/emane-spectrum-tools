@@ -1,29 +1,3 @@
----
-title: |
-    | EMANE Spectrum Tools
-    | OTA Record
-    | Data Description
-geometry: margin=1in
-header-includes:
-    - \usepackage{fancyhdr}
-    - \pagestyle{fancy}
-    - \usepackage{relsize}
-    - \renewcommand{\_}{\textscale{.7}{\textunderscore}}
----
-
-\begin{center}
-\normalsize
-\vspace{-.7cm}
-Adjacent Link LLC\\
-Bridgewater, NJ 08807\\
-\url{http://adjacentlink.com}
-
-\vspace{.5cm}
-Revision 1.0
-\end{center}
-
-\vspace{.5cm}
-
 Copyright (c) 2022 - Adjacent Link LLC, Bridgewater, New Jersey  
 This work is licensed under [Creative Commons Attribution 4.0 International License][1].
 
@@ -31,18 +5,19 @@ This work is licensed under [Creative Commons Attribution 4.0 International Lice
 
 # Overview 
 
-This document describes the output and formats for \texttt{emane-spectrum-ota-recorder} data.
+This document describes the output and formats for
+`emane-spectrum-ota-recorder` data.
 
 # emane-spectrum-ota-recorder
 
-The \texttt{emane-spectrum-ota-recorder} subscribes to both the EMANE
+The `emane-spectrum-ota-recorder` subscribes to both the EMANE
 over-the-air and event multicast groups and records the emulator
 physical layer common header and common radio model (MAC) header for
 each over-the-air frame and all published events.
 
 \bigskip
 \footnotesize
-```{.bash}
+```bash
 $ emane-spectrun-ota-recorder \
     --realtime \
     --daemonize \
@@ -55,18 +30,17 @@ $ emane-spectrun-ota-recorder \
     /tmp/emane-ota-recorder.data
 ```
 \vspace{-.2cm}
-Sample \texttt{emane-spectrum-ota-recorder} command line.
+Sample `emane-spectrum-ota-recorder` command line.
 \normalsize
 
-\texttt{emane-spectrum-ota-recorder} data are stored as length prefix
-framed serialized \texttt{Record} messages defined using a Google
-Protocol Buffer specification, where each serialized message is
-preceded by its length as an unsigned 32-bit integer value (4 bytes)
-in network byte order.
+`emane-spectrum-ota-recorder` data are stored as length prefix framed
+serialized `Record` messages defined using a Google Protocol Buffer
+specification, where each serialized message is preceded by its length
+as an unsigned 32-bit integer value (4 bytes) in network byte order.
 
 \bigskip
 \footnotesize
-```{.proto}
+```proto
 syntax = "proto2";
 
 package EMANESpectrumTools;
@@ -102,17 +76,17 @@ message Record
 }
 ```
 \vspace{-.2cm}
-\texttt{emane-spectrum-tools/src/emane-spectrum-ota-recorder/record.proto}
+`emane-spectrum-tools/src/emane-spectrum-ota-recorder/record.proto`
 \normalsize
 
-1. `type`: Specifies either \texttt{TYPE\_OTA} or \texttt{TYPE\_EVENT}
-   corresponding to the presence of \texttt{ota} or \texttt{event},
+1. `type`: Specifies either `TYPE_OTA` or `TYPE_EVENT`
+   corresponding to the presence of `ota` or `event`,
    for an over-the-air record or an event record, respectively.
 
 2. `timestamp`: Specifies the time of the record in microseconds since
    the epoch (1970-01-01 UTC).
 
-3. `ota`: Over-the-air frame data when `type` is \texttt{TYPE\_OTA}.
+3. `ota`: Over-the-air frame data when `type` is `TYPE_OTA`.
 
     1. `source`: NEM id of the transmitting node.
     
@@ -123,131 +97,131 @@ message Record
        the transmission.
     
     4. `common_phy_header`: Serialized emulator framework header.  
-       \texttt{emane/src/libemane/\-commonphyheader.proto}.
+       `emane/src/libemane/commonphyheader.proto`.
     
     5. `common_mac_header`: Serialized common radio model (MAC)
        header.  
-       \texttt{emane/src/libemane/\-commonmacheader.proto}.
+       `emane/src/libemane/commonmacheader.proto`.
 
 
-4. `event`: Event data when `type` is \texttt{TYPE\_EVENT}.
+4. `event`: Event data when `type` is `TYPE_EVENT`.
 
     1. `event_data`: Serialized event.  
-       \texttt{emane/src/libemane/event.proto}  
+       `emane/src/libemane/event.proto`  
        
-       With \texttt{serializations} being one of:
+       With `serializations` being one of:
        
-        1. \texttt{antennaprofileevent.proto}
-        2. \texttt{commeffectevent.proto}
-        3. \texttt{fadingselectionevent.proto}
-        4. \texttt{locationevent.proto}
-        5. \texttt{pathlossevent.proto}
-        6. \texttt{tdmascheduleevent.proto}
+        1. `antennaprofileevent.proto`
+        2. `commeffectevent.proto`
+        3. `fadingselectionevent.proto`
+        4. `locationevent.proto`
+        5. `pathlossevent.proto`
+        6. `tdmascheduleevent.proto`
 
-       based on \texttt{eventId}: \texttt{emane/include/emane/events/eventids.h}.
+       based on `eventId`: `emane/include/emane/events/eventids.h`.
        
 # emane-spectrum-ota-record-tool
 
-The \texttt{emane-spectrum-ota-record-tool} converts an
-\texttt{emane-\-spectrum-\-ota-\-recorder} data file into a long
+The `emane-spectrum-ota-record-tool` converts an
+`emane-spectrum-ota-recorder` data file into a long
 format tidy data set as either a CSV or [SQLite][2] database
 file. Both output formats contain the same information. Each
 over-the-air frame is converted into multiple row entries (long
 format), where each row contains the start-of-transmission (SoT) and
 end-of-transmission (EoT) time for an individual frequency segment
-uniquely identified by \texttt{ota\_source}, \texttt{ota\_sequence},
-\texttt{antenna\_index}, \texttt{frequency\_hz}, and \texttt{sot}.
+uniquely identified by `ota_source`, `ota_sequence`,
+`antenna_index`, `frequency_hz`, and `sot`.
 
-1. `ota_source`: (\texttt{INT}) NEM id of the transmitting node.
+1. `ota_source`: (`INT`) NEM id of the transmitting node.
 
-2. `ota_destination`: (\texttt{INT}) NEM id of the destination node or
+2. `ota_destination`: (`INT`) NEM id of the destination node or
    65535 for broadcast.
    
-3. `ota_sequence`: (\texttt{INT}) Unique per source over-the-air
+3. `ota_sequence`: (`INT`) Unique per source over-the-air
    sequence number for the transmission.
    
-4. `phy_sub_id`: (\texttt{INT}) Used to differentiate between emulator
+4. `phy_sub_id`: (`INT`) Used to differentiate between emulator
    physical layer instances for different waveforms.
 
-5. `phy_sequence`: (\texttt{INT}) Unique per source physical layer
+5. `phy_sequence`: (`INT`) Unique per source physical layer
    sequence number for the transmission.
 
-6. `mac_registration_id`: (\texttt{INT}) Waveform radio model unique
+6. `mac_registration_id`: (`INT`) Waveform radio model unique
    identifier.
 
-7. `mac_sequence`: (\texttt{INT}) Unique per source radio model
+7. `mac_sequence`: (`INT`) Unique per source radio model
    sequence number for the transmission.
 
-8. `transmitter`: (\texttt{INT}) NEM id of the transmitting node.
+8. `transmitter`: (`INT`) NEM id of the transmitting node.
 
-9. `antenna_index`: (\texttt{INT}) Transmit antenna index of the
+9. `antenna_index`: (`INT`) Transmit antenna index of the
    transmitting NEM.
 
-10. `bandwidth_hz`: (\texttt{INT}) Transmit bandwidth or 0 when using spectral masks.
+10. `bandwidth_hz`: (`INT`) Transmit bandwidth or 0 when using spectral masks.
 
-11. `fixed_gain_dbi`: (\texttt{DOUBLE}) Fixed transmit antenna gain in
+11. `fixed_gain_dbi`: (`DOUBLE`) Fixed transmit antenna gain in
     dBi (ideal omni). Optional and present only when profile defined
     antenna information: `antenna_profile_id`, `antenna_azimuth`, and
     `antenna_elevation` are not.
 
-12. `spectral_mask_index`: (\texttt{INT}) Spectral mask index in
+12. `spectral_mask_index`: (`INT`) Spectral mask index in
     use. Optional and only present when `bandwidth_hz` is 0.
 
-13. `antenna_profile_id`: (\texttt{INT}) Transmit antenna profile
+13. `antenna_profile_id`: (`INT`) Transmit antenna profile
     id. Optional and only present when `fixed_gain_dbi` is not.
 
-14. `antenna_azimuth`: (\texttt{DOUBLE}) Profile defined antenna
+14. `antenna_azimuth`: (`DOUBLE`) Profile defined antenna
     pointing information. Optional and only present when
     `fixed_gain_dbi` is not.
 
-15. `antenna_elevation`: (\texttt{DOUBLE}) Profile defined antenna
+15. `antenna_elevation`: (`DOUBLE`) Profile defined antenna
     pointing information. Optional and only present when
     `fixed_gain_dbi` is not.
     
-16. `frequency_hz`: (\texttt{INT}): Center frequency of frequency
+16. `frequency_hz`: (`INT`): Center frequency of frequency
     segment in Hz.
 
-17. `sot`: (\texttt{INT}) Start-of-transmission in microseconds since
+17. `sot`: (`INT`) Start-of-transmission in microseconds since
     the epoch (1970-01-01 UTC).
 
-18. `eot`: (\texttt{INT}) End-of-transmission in microseconds since
+18. `eot`: (`INT`) End-of-transmission in microseconds since
     the epoch (1970-01-01 UTC).
 
-19. `power_dbm`: (\texttt{DOUBLE}) Transmit power in dBm.
+19. `power_dbm`: (`DOUBLE`) Transmit power in dBm.
 
-20. `latitude_degrees`: (\texttt{DOUBLE}) Transmitting NEM's latitude
+20. `latitude_degrees`: (`DOUBLE`) Transmitting NEM's latitude
     in degrees. Optional and only present when location events are
     published.
 
-21. `longitude_degrees`: (\texttt{DOUBLE}) Transmitting NEM's
+21. `longitude_degrees`: (`DOUBLE`) Transmitting NEM's
     longitude in degrees. Optional and only present when location
     events are published.
 
-22. `altitude_meters`: (\texttt{DOUBLE}) Transmitting NEM's altitude
+22. `altitude_meters`: (`DOUBLE`) Transmitting NEM's altitude
     in meters. Optional and only present when location events are
     published.
 
-23. `azimuth_degrees`: (\texttt{DOUBLE}) Transmitting NEM's velocity
+23. `azimuth_degrees`: (`DOUBLE`) Transmitting NEM's velocity
     azimuth in degrees. Optional and only present when location events
     containing velocity are published.
 
-24. `elevation_degree`: (\texttt{DOUBLE}) Transmitting NEM's velocity
+24. `elevation_degree`: (`DOUBLE`) Transmitting NEM's velocity
     elevation in degrees. Optional and only present when location
     events containing velocity are published.
 
-25. `magnitude_meters_per_second`: (\texttt{DOUBLE}) Transmitting
+25. `magnitude_meters_per_second`: (`DOUBLE`) Transmitting
     NEM's velocity magnitude in meters per second. Optional and only
     present when location events containing velocity are published.
 
-26. `roll_degrees`: (\texttt{DOUBLE}) Transmitting NEM's orientation
+26. `roll_degrees`: (`DOUBLE`) Transmitting NEM's orientation
     roll in degrees. Optional and only present when location events
     containing orientation are published.
 
-27. `pitch_degrees`: (\texttt{DOUBLE}) Transmitting NEM's orientation
+27. `pitch_degrees`: (`DOUBLE`) Transmitting NEM's orientation
     pitch in degrees. Optional and only present when location events
     containing oricentation are published.
 
-28. `yaw_degrees`: (\texttt{DOUBLE}) Transmitting NEM's orientation
+28. `yaw_degrees`: (`DOUBLE`) Transmitting NEM's orientation
     yaw in degrees. Optional and only present when location events
     containing oricentation are published.
 
@@ -261,7 +235,7 @@ antennas][4] can be found on the EMANE Wiki.
 
 \bigskip
 \footnotesize
-```{.sql}
+```sql
 CREATE TABLE ota (ota_source INT, 
                   ota_destination INT, 
                   ota_sequence INT, 
@@ -293,6 +267,6 @@ CREATE TABLE ota (ota_source INT,
                   PRIMARY KEY (ota_source,ota_sequence,antenna_index,frequency_hz,sot));
 ```
 \vspace{-.2cm}
-SQLite schema used by \texttt{emane-spectrum-ota-record-tool}.
+SQLite schema used by `emane-spectrum-ota-record-tool`.
 \normalsize
 
