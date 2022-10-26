@@ -1,4 +1,4 @@
-FROM rockylinux:8.5
+FROM rockylinux:8
 
 RUN mkdir -p /opt/built
 
@@ -9,7 +9,7 @@ RUN dnf config-manager --set-enabled powertools
 # Copy and install packages from the latest upsteam dependencies
 WORKDIR /opt
 RUN mkdir -p dependencies
-COPY --from=gcr.io/automated-builds-303920/rockylinux8.5.emane /opt/built/* dependencies/
+COPY --from=gcr.io/automated-builds-303920/rockylinux8.emane /opt/built/* dependencies/
 RUN dnf -y install dependencies/*\.rpm
 
 # Build tools and depends
