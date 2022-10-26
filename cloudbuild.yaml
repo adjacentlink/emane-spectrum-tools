@@ -5,4 +5,4 @@ steps:
 images:
 - 'gcr.io/$PROJECT_ID/$_BUILD_DISTRO$_DISTRO_VERSION.emane-spectrum-tools'
 
-timeout: 30m
+timeout: 90m
