@@ -16,8 +16,9 @@ RUN yum -y install git gcc-c++ make autoconf automake libtool rpm-build python-s
                    libxml2-devel libpcap-devel pcre-devel libuuid-devel python-devel \
                    protobuf protobuf-devel protobuf-compiler protobuf-python zeromq-devel
 
-# Setup emane_SRC_ROOT environment variable
+# Setup emane_SRC_ROOT environment variable and build protobuf files
 RUN git clone https://github.com/adjacentlink/emane -b develop
+RUN cd emane && ./autogen.sh && ./configure && make
 ENV emane_SRC_ROOT=/opt/emane
 
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop

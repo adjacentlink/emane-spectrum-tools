@@ -20,8 +20,9 @@ RUN apt-get -y install git gcc g++ autoconf automake libtool dh-python  debhelpe
                        python3-protobuf protobuf-compiler \
                        python3-zmq libzmq5 libzmq3-dev
 
-# Setup emane_SRC_ROOT environment variable
+# Setup emane_SRC_ROOT environment variable and build protobuf files
 RUN git clone https://github.com/adjacentlink/emane -b develop
+RUN cd emane && ./autogen.sh && ./configure && make
 ENV emane_SRC_ROOT=/opt/emane
 
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
