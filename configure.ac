@@ -1,5 +1,5 @@
 AC_COPYRIGHT([
- Copyright (c) 2019-2020 - Adjacent Link LLC, Bridgewater, New Jersey
+ Copyright (c) 2019-2022 - Adjacent Link LLC, Bridgewater, New Jersey
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@ AC_COPYRIGHT([
  See toplevel COPYING for more information.
 ])
 
-AC_INIT([emane-spectrum-tools],0.2.7,[labs at adjacentlink dot com])
+AC_INIT([emane-spectrum-tools],0.2.8,[labs at adjacentlink dot com])
 
 AC_CONFIG_MACRO_DIR([m4])
 
