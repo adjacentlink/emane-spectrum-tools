@@ -110,10 +110,7 @@ namespace EMANE
       ProcessResult process(const TimePoint & now,
                             const CommonPHYHeader & commonPHYHeader,
                             const std::vector<std::pair<LocationInfo,bool>> & locationInfos,
-                            const  std::vector<std::pair<FadingInfo,bool>> & fadingSelection,
-                            bool bInBand);
-
-
+                            const  std::vector<std::pair<FadingInfo,bool>> & fadingSelection);
 
     private:
       NEMId id_;

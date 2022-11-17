@@ -1,3 +1,5 @@
+%global __brp_check_rpaths %{nil}
+
 Summary: EMANE Spectrum Tools
 Name:  emane-spectrum-tools
 Version: @VERSION@
@@ -95,6 +97,7 @@ Requires: python3-protobuf
 
 %build
 %configure
+make %{?_smp_mflags}
 
 %install
 %if %{?with_python3:1}%{!?with_python3:0}
@@ -102,8 +105,15 @@ make  DESTDIR=${RPM_BUILD_ROOT} PYTHON=%{__python3} install
 
 mv %{buildroot}/%{_bindir}/emane-spectrum-analyzer %{buildroot}/%{_bindir}/emane-spectrum-analyzer-%{python3_version}
 ln -s emane-spectrum-analyzer-%{python3_version} %{buildroot}%{_bindir}/emane-spectrum-analyzer-3
+mv %{buildroot}/%{_bindir}/emane-spectrum-ota-record-tool %{buildroot}/%{_bindir}/emane-spectrum-ota-record-tool-%{python3_version}
+ln -s emane-spectrum-ota-record-tool-%{python3_version} %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool-3
+mv %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool-%{python3_version}
+ln -s emane-spectrum-energy-recording-tool-%{python3_version} %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool-3
+
 %if 0%{?with_python2} == 0
 ln -s emane-spectrum-analyzer-3 %{buildroot}%{_bindir}/emane-spectrum-analyzer
+ln -s emane-spectrum-ota-record-tool-3 %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool
+ln -s emane-spectrum-energy-recording-tool-3 %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool
 %endif
 pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*-%{python3_version}
 %endif
@@ -114,6 +124,14 @@ make  DESTDIR=${RPM_BUILD_ROOT} PYTHON=%{__python2} install
 mv %{buildroot}/%{_bindir}/emane-spectrum-analyzer %{buildroot}/%{_bindir}/emane-spectrum-analyzer-%{python2_version}
 ln -s emane-spectrum-analyzer-%{python2_version} %{buildroot}%{_bindir}/emane-spectrum-analyzer-2
 ln -s emane-spectrum-analyzer-2 %{buildroot}%{_bindir}/emane-spectrum-analyzer
+
+mv %{buildroot}/%{_bindir}/emane-spectrum-ota-record-tool %{buildroot}/%{_bindir}/emane-spectrum-ota-record-tool-%{python2_version}
+ln -s emane-spectrum-ota-record-tool-%{python2_version} %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool-2
+ln -s emane-spectrum-ota-record-tool-2 %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool
+mv %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool-%{python2_version}
+ln -s emane-spectrum-energy-recording-tool-%{python2_version} %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool-2
+ln -s emane-spectrum-energy-recording-tool-2 %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool
+
 %if %{with_pathfix}
 pathfix.py -pni "%{__python2} %{py2_shbang_opts}" %{buildroot}%{_bindir}/*-%{python2_version}
 %endif
@@ -139,6 +157,7 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %{_bindir}/emane-spectrum-monitor
 %{_libdir}/libemane-spectrum-monitor.*
+%{_bindir}/emane-spectrum-ota-recorder
 %doc %{_pkgdocdir}
 %if 0%{?_licensedir:1}
 %dir %{_licensedir}/%{name}
@@ -151,6 +170,12 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/emane-spectrum-analyzer
 %{_bindir}/emane-spectrum-analyzer-2
 %{_bindir}/emane-spectrum-analyzer-%{python2_version}
+%{_bindir}/emane-spectrum-ota-record-tool
+%{_bindir}/emane-spectrum-ota-record-tool-2
+%{_bindir}/emane-spectrum-ota-record-tool-%{python2_version}
+%{_bindir}/emane-spectrum-energy-recording-tool
+%{_bindir}/emane-spectrum-energy-recording-tool-2
+%{_bindir}/emane-spectrum-energy-recording-tool-%{python2_version}
 %{use_python2_sitelib}/*
 %doc %{_pkgdocdir}
 %if 0%{?_licensedir:1}
@@ -164,9 +189,15 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %if 0%{?with_python2} == 0
 %{_bindir}/emane-spectrum-analyzer
+%{_bindir}/emane-spectrum-ota-record-tool
+%{_bindir}/emane-spectrum-energy-recording-tool
 %endif
 %{_bindir}/emane-spectrum-analyzer-3
 %{_bindir}/emane-spectrum-analyzer-%{python3_version}
+%{_bindir}/emane-spectrum-ota-record-tool-3
+%{_bindir}/emane-spectrum-ota-record-tool-%{python3_version}
+%{_bindir}/emane-spectrum-energy-recording-tool-3
+%{_bindir}/emane-spectrum-energy-recording-tool-%{python3_version}
 %{python3_sitelib}/*
 %doc %{_pkgdocdir}
 %if 0%{?_licensedir:1}

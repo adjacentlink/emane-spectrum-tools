@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015,2019-2020 - Adjacent Link LLC, Bridgewater,
+ * Copyright (c) 2013-2015,2019-2021 - Adjacent Link LLC, Bridgewater,
  * New Jersey
  * All rights reserved.
  *
@@ -33,6 +33,7 @@
 
 #include "spectrummonitoralt.h"
 #include "noiserecorder.h"
+#include "spectralmaskmanager.h"
 
 #include "emane/spectrumserviceexception.h"
 #include "emane/utils/conversionutils.h"
@@ -64,7 +65,8 @@ EMANE::SpectrumTools::SpectrumMonitorAlt::update(const TimePoint & now,
                                                  std::uint64_t u64SegmentBandwidthHz,
                                                  const std::vector<double> & rxPowersMilliWatt,
                                                  const std::vector<NEMId> & transmitters,
-                                                 AntennaIndex txAntennaIndex)
+                                                 AntennaIndex txAntennaIndex,
+                                                 SpectralMaskIndex spectralMaskIndex)
 
 
 {
@@ -160,21 +162,48 @@ EMANE::SpectrumTools::SpectrumMonitorAlt::update(const TimePoint & now,
                                                                    0}})).first;
             }
 
+          auto maskOverlap =
+            SpectralMaskManager::instance()->getSpectralOverlap(segment.getFrequencyHz(), // tx freq
+                                                                segment.getFrequencyHz(), // rx freq
+                                                                u64SegmentBandwidthHz, // rx bandwidth
+                                                                u64SegmentBandwidthHz, // tx bandwidth
+                                                                spectralMaskIndex);
 
-          double u64UpperFrequencyHz{segment.getFrequencyHz() + u64SegmentBandwidthHz / 2.0};
-          double u64LowerFrequencyHz{segment.getFrequencyHz() - u64SegmentBandwidthHz / 2.0};
+          auto & spectralOverlaps = std::get<0>(maskOverlap);
 
-          std::tie(startOfReception,endOfReception) =
-            iter->second->update(now,
-                                 validTxTime,
-                                 validOffset,
-                                 validPropagation,
-                                 validDuration,
-                                 rxPowersMilliWatt[i],
-                                 transmitters,
-                                 u64LowerFrequencyHz,
-                                 u64UpperFrequencyHz,
-                                 txAntennaIndex);
+          std::uint64_t u64LowerOverlapFrequencyHz{std::get<1>(maskOverlap)};
+          std::uint64_t u64UpperOverlapFrequencyHz{std::get<2>(maskOverlap)};
+
+          double dOverlapRxPowerMillWatt{};
+
+          if(!spectralOverlaps.empty())
+            {
+              for(const auto & spectralOverlap : spectralOverlaps)
+                {
+                  const auto & spectralSegments =  std::get<0>(spectralOverlap);
+
+                  for(const auto & spectralSegment : spectralSegments)
+                    {
+                      dOverlapRxPowerMillWatt +=
+                        // rx_power_mW * multipler_mWr * overlap_ratio
+                        rxPowersMilliWatt[i] *
+                        std::get<1>(spectralSegment) *
+                        std::get<0>(spectralSegment);
+                    }
+                }
+
+              std::tie(startOfReception,endOfReception) =
+                iter->second->update(now,
+                                     validTxTime,
+                                     validOffset,
+                                     validPropagation,
+                                     validDuration,
+                                     dOverlapRxPowerMillWatt,
+                                     transmitters,
+                                     u64LowerOverlapFrequencyHz,
+                                     u64UpperOverlapFrequencyHz,
+                                     txAntennaIndex);
+            }
         }
 
       ++i;

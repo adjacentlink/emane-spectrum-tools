@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 - Adjacent Link LLC, Bridgewater, New Jersey
+ * Copyright (c) 2022 - Adjacent Link LLC, Bridgewater, New Jersey
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,70 +32,34 @@
 
 syntax = "proto2";
 
-package EMANESpectrumMonitor;
+package EMANESpectrumTools;
 
 option optimize_for = SPEED;
 
-message SpectrumEnergy
+message Record
 {
-  message POV
+  message OTA
   {
-    message Position
-    {
-      required double latitude_degrees = 1;
-      required double longitude_degrees = 2;
-      required double altitude_meters = 3;
-    }
+    required uint32 source = 1;
+    required uint32 destination = 2;
+    required uint64 sequence = 3;
+    required bytes common_phy_header = 4;
+    required bytes common_mac_header = 5;
+  };
 
-    message Orientation
-    {
-      required double roll_degrees = 1;
-      required double pitch_degrees = 2;
-      required double yaw_degrees = 3;
-    }
-
-    message Velocity
-    {
-      required double azimuth_degrees = 1;
-      required double elevation_degrees = 2;
-      required double magnitude_meters_per_second = 3;
-    }
-
-    required Position position = 1;
-    optional Orientation orientation = 2;
-    optional Velocity velocity = 3;
-  }
-
-  message Antenna
+  message Event
   {
-    message Pointing
-    {
-      required uint32 profile_id = 1;
-      required double azimuth_degrees = 2;
-      required double elevation_degrees = 3;
-    }
+    required bytes event_data = 1;
+  };
 
-    optional double fixed_gain_dbi = 1;
-    optional Pointing pointing = 2;
-  }
-
-  message Entry
+  enum Type
   {
-    message Energy
-    {
-      required uint64 frequency_hz = 1;
-      repeated double energy_mW = 2;
-    }
+    TYPE_OTA = 1;
+    TYPE_EVENT = 2;
+  };
 
-    required uint32 subid = 1;
-    required uint64 bandwidth_hz = 2;
-    repeated Energy energies = 3;
-  }
-
-  required uint64 start_time = 1;
-  required uint64 duration = 2;
-  required uint64 sequence = 3;
-  repeated Entry entries = 4;
-  required Antenna antenna = 5;
-  optional POV pov = 6;
+  required Type type = 1;
+  required uint64 timestamp = 2;
+  optional OTA ota = 3;
+  optional Event event = 4;
 }

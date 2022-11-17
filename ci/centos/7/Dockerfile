@@ -16,15 +16,18 @@ RUN yum -y install git gcc-c++ make autoconf automake libtool rpm-build python-s
                    libxml2-devel libpcap-devel pcre-devel libuuid-devel python-devel \
                    protobuf protobuf-devel protobuf-compiler protobuf-python zeromq-devel
 
-# Setup emane_SRC_ROOT environment variable
+# Install devtoolset-9 to support c++17 compatibility
+RUN yum -y install centos-release-scl
+RUN yum -y install devtoolset-9
+
+# Setup emane_SRC_ROOT environment variable and build protobuf files
 RUN git clone https://github.com/adjacentlink/emane -b develop
+RUN cd emane && scl enable devtoolset-9 "./autogen.sh && ./configure && make"
 ENV emane_SRC_ROOT=/opt/emane
 
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
 WORKDIR emane-spectrum-tools
-RUN ./autogen.sh
-RUN ./configure
-RUN make rpm
+RUN ./autogen.sh && ./configure && make rpm
 RUN cp $(find .rpmbuild/RPMS -name "*\.rpm") /opt/built
 RUN yum -y install /opt/built/*
 

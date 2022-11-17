@@ -1,3 +1,4 @@
 usr/lib/*/libemane-spectrum-monitor.so
 usr/bin/emane-spectrum-monitor
+usr/bin/emane-spectrum-ota-recorder
 
