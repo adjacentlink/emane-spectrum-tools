@@ -1,4 +1,5 @@
 %global __brp_check_rpaths %{nil}
+%define source_date_epoch_from_changelog 0
 
 Summary: EMANE Spectrum Tools
 Name:  emane-spectrum-tools
@@ -12,72 +13,12 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 Vendor: Adjacent Link LLC
 Requires: emane-libs
 
-%define with_old_depends 0
-%define with_pathfix 1
-
-# RHEL/CentOS
-%if 0%{?el7}
-%define with_python2 1
-%define with_old_depends 1
-%define with_pathfix 0
-%endif
-
-%if 0%{?el8}
-%define with_python3 1
-%endif
-
-# Fedora (non-EOL)
-%if 0%{?fedora}
-%if %{fedora} < 31
-%define with_python3 1
-%define with_python2 1
-%else
-%define with_python3 1
-%endif
-%endif
-
-%if 0%{?with_python2}
-%if %{with_old_depends}
-%define use_python2_sitelib %{python_sitelib}
-%else
-%define use_python2_sitelib %{python2_sitelib}
-%endif
-%endif
-
 %global _description \
 EMANE spectrum tools and utility modules.
 
 %description %{_description}
 EMANE spectrum tools and utility modules.
 
-%if 0%{?with_python2}
-%package -n python2-%{name}
-Summary: %{summary}
-BuildArch: noarch
-%{?python_provide:%python_provide python2-%{name}}
-%if %{with_old_depends}
-Requires: python-setuptools
-Requires: python-daemon
-Requires: python-matplotlib
-Requires: numpy
-Requires: python-pandas
-Requires: python-zmq
-Requires: protobuf-python
-%define use_python2_sitelib %{python_sitelib}
-%else
-Requires: python2-setuptools
-Requires: python2-daemon
-Requires: python2-matplotlib
-Requires: python2-numpy
-Requires: python2-pandas
-Requires: python2-zmq
-Requires: python2-protobuf
-%define use_python2_sitelib %{python2_sitelib}
-%endif
-%description -n python2-%{name} %{_description}
-%endif
-
-%if %{?with_python3:1}%{!?with_python3:0}
 %package -n python3-%{name}
 Summary: %{summary}
 BuildArch: noarch
@@ -90,7 +31,6 @@ Requires: python3-pandas
 Requires: python3-zmq
 Requires: python3-protobuf
 %description -n python3-%{name} %{_description}
-%endif
 
 %prep
 %setup -q
@@ -100,7 +40,6 @@ Requires: python3-protobuf
 make %{?_smp_mflags}
 
 %install
-%if %{?with_python3:1}%{!?with_python3:0}
 make  DESTDIR=${RPM_BUILD_ROOT} PYTHON=%{__python3} install
 
 mv %{buildroot}/%{_bindir}/emane-spectrum-analyzer %{buildroot}/%{_bindir}/emane-spectrum-analyzer-%{python3_version}
@@ -110,32 +49,11 @@ ln -s emane-spectrum-ota-record-tool-%{python3_version} %{buildroot}%{_bindir}/e
 mv %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool-%{python3_version}
 ln -s emane-spectrum-energy-recording-tool-%{python3_version} %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool-3
 
-%if 0%{?with_python2} == 0
 ln -s emane-spectrum-analyzer-3 %{buildroot}%{_bindir}/emane-spectrum-analyzer
 ln -s emane-spectrum-ota-record-tool-3 %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool
 ln -s emane-spectrum-energy-recording-tool-3 %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool
-%endif
+
 pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*-%{python3_version}
-%endif
-
-%if 0%{?with_python2}
-make  DESTDIR=${RPM_BUILD_ROOT} PYTHON=%{__python2} install
-
-mv %{buildroot}/%{_bindir}/emane-spectrum-analyzer %{buildroot}/%{_bindir}/emane-spectrum-analyzer-%{python2_version}
-ln -s emane-spectrum-analyzer-%{python2_version} %{buildroot}%{_bindir}/emane-spectrum-analyzer-2
-ln -s emane-spectrum-analyzer-2 %{buildroot}%{_bindir}/emane-spectrum-analyzer
-
-mv %{buildroot}/%{_bindir}/emane-spectrum-ota-record-tool %{buildroot}/%{_bindir}/emane-spectrum-ota-record-tool-%{python2_version}
-ln -s emane-spectrum-ota-record-tool-%{python2_version} %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool-2
-ln -s emane-spectrum-ota-record-tool-2 %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool
-mv %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool %{buildroot}/%{_bindir}/emane-spectrum-energy-recording-tool-%{python2_version}
-ln -s emane-spectrum-energy-recording-tool-%{python2_version} %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool-2
-ln -s emane-spectrum-energy-recording-tool-2 %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool
-
-%if %{with_pathfix}
-pathfix.py -pni "%{__python2} %{py2_shbang_opts}" %{buildroot}%{_bindir}/*-%{python2_version}
-%endif
-%endif
 
 find ${RPM_BUILD_ROOT} -name '*.a' -exec rm '{}'  \;
 find ${RPM_BUILD_ROOT} -name '*.la' -exec rm '{}' \;
@@ -164,34 +82,11 @@ rm -rf $RPM_BUILD_ROOT
 %license %{_licensedir}/%{name}/COPYING
 %endif
 
-%if 0%{?with_python2}
-%files -n python2-%{name}
-%defattr(-,root,root,-)
-%{_bindir}/emane-spectrum-analyzer
-%{_bindir}/emane-spectrum-analyzer-2
-%{_bindir}/emane-spectrum-analyzer-%{python2_version}
-%{_bindir}/emane-spectrum-ota-record-tool
-%{_bindir}/emane-spectrum-ota-record-tool-2
-%{_bindir}/emane-spectrum-ota-record-tool-%{python2_version}
-%{_bindir}/emane-spectrum-energy-recording-tool
-%{_bindir}/emane-spectrum-energy-recording-tool-2
-%{_bindir}/emane-spectrum-energy-recording-tool-%{python2_version}
-%{use_python2_sitelib}/*
-%doc %{_pkgdocdir}
-%if 0%{?_licensedir:1}
-%dir %{_licensedir}/%{name}
-%license %{_licensedir}/%{name}/COPYING
-%endif
-%endif
-
-%if %{?with_python3:1}%{!?with_python3:0}
 %files -n python3-%{name}
 %defattr(-,root,root,-)
-%if 0%{?with_python2} == 0
 %{_bindir}/emane-spectrum-analyzer
 %{_bindir}/emane-spectrum-ota-record-tool
 %{_bindir}/emane-spectrum-energy-recording-tool
-%endif
 %{_bindir}/emane-spectrum-analyzer-3
 %{_bindir}/emane-spectrum-analyzer-%{python3_version}
 %{_bindir}/emane-spectrum-ota-record-tool-3
@@ -204,5 +99,3 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_licensedir}/%{name}
 %license %{_licensedir}/%{name}/COPYING
 %endif
-%endif
-
