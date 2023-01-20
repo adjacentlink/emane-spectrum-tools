@@ -17,3 +17,9 @@ Section: python
 Architecture: all
 Depends: ${python3:Depends}, ${misc:Depends}
 Description: EMANE Spectrum Tools
+
+Package: opentestpoint-probe-emane-spectrum-tools
+Section: python
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}, python3-opentestpoint, python3-emane, python3-lxml, opentestpoint-probe-emane
+Description: OpenTestPoint EMANE Spectrum Tools Probe

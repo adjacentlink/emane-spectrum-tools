@@ -37,6 +37,34 @@ resources such as CPU cores accordingly.
 an XML configuration file.  See `emane-spectrum-monitor -h` for more
 information.
 
+# OpenTestPoint Probe
+
+OpenTestPoint measurement probes `emane-spectrum-monitor` instances.
+
+## Sample otestpontd XML
+
+```XML
+<otestpoint id="node-6"
+            discovery="10.99.0.6:8881"
+            publish="10.99.0.6:8882">
+  <probe configuration="probe-emane-spectrum-tools-monitor.xml">
+    <python module="otestpoint.emane_spectrum_tools.monitor"
+            class="Monitor"/>
+  </probe>
+</otestpoint>
+```
+
+## Sample Probe XML
+
+```XML
+<probe-emane-spectrum-tools-Monitor address='localhost' nem='6'>
+  <probes>
+    <EMANE.Spectrum.Tools.Monitor.Counters.General enable="yes"/>
+    <EMANE.Spectrum.Tools.Monitor.Tables.Events enable="yes"/>
+    <EMANE.Spectrum.Tools.Monitor.Tables.Status enable="yes"/>
+  </probes>
+</probe-emane-spectrum-tools-Monitor>
+```
 
 # Example experiment
 

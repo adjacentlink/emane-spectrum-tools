@@ -32,6 +32,20 @@ Requires: python3-zmq
 Requires: python3-protobuf
 %description -n python3-%{name} %{_description}
 
+%package -n opentestpoint-probe-emane-spectrum-tools
+Requires: python3-setuptools
+Requires: python3-protobuf
+Requires: python3-opentestpoint
+Requires: python3-emane
+Requires: python3-lxml
+Requires: opentestpoint-probe-emane
+Summary: OpenTestPoint EMANE Spectrum Tools probe
+Group: Development/Libraries
+BuildArch: noarch
+
+%description -n opentestpoint-probe-emane-spectrum-tools
+OpenTestPoint OpenTestPoint EMANE Spectrum Tools probe
+
 %prep
 %setup -q
 
@@ -93,7 +107,18 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/emane-spectrum-ota-record-tool-%{python3_version}
 %{_bindir}/emane-spectrum-energy-recording-tool-3
 %{_bindir}/emane-spectrum-energy-recording-tool-%{python3_version}
-%{python3_sitelib}/*
+%{python3_sitelib}/emane_spectrum_tools*
+%doc %{_pkgdocdir}
+%if 0%{?_licensedir:1}
+%dir %{_licensedir}/%{name}
+%license %{_licensedir}/%{name}/COPYING
+%endif
+
+%files -n opentestpoint-probe-emane-spectrum-tools
+%defattr(-,root,root,-)
+%{python3_sitelib}/otestpoint*
+%{python3_sitelib}/opentestpoint*
+
 %doc %{_pkgdocdir}
 %if 0%{?_licensedir:1}
 %dir %{_licensedir}/%{name}
