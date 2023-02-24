@@ -10,6 +10,8 @@ RUN dnf config-manager --set-enabled powertools
 WORKDIR /opt
 RUN mkdir -p dependencies
 COPY --from=gcr.io/automated-builds-303920/rockylinux8.emane /opt/built/* dependencies/
+COPY --from=gcr.io/automated-builds-303920/rockylinux8.opentestpoint /opt/built/* dependencies/
+COPY --from=gcr.io/automated-builds-303920/rockylinux8.opentestpoint-probe-emane /opt/built/* dependencies/
 RUN dnf -y install dependencies/*\.rpm
 
 # Build tools and depends

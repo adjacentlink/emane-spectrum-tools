@@ -8,6 +8,8 @@ RUN dnf -y update
 WORKDIR /opt
 RUN mkdir -p dependencies
 COPY --from=gcr.io/automated-builds-303920/fedora37.emane /opt/built/* dependencies/
+COPY --from=gcr.io/automated-builds-303920/fedora37.opentestpoint /opt/built/* dependencies/
+COPY --from=gcr.io/automated-builds-303920/fedora37.opentestpoint-probe-emane /opt/built/* dependencies/
 RUN dnf -y install dependencies/*\.rpm
 
 # Build tools and depends

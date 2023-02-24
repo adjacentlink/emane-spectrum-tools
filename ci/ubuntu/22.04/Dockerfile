@@ -12,6 +12,8 @@ RUN apt-get -y upgrade --no-install-recommends
 WORKDIR /opt
 RUN mkdir -p dependencies
 COPY --from=gcr.io/automated-builds-303920/ubuntu22.04.emane /opt/built/* dependencies/
+COPY --from=gcr.io/automated-builds-303920/ubuntu22.04.opentestpoint /opt/built/* dependencies/
+COPY --from=gcr.io/automated-builds-303920/ubuntu22.04.opentestpoint-probe-emane /opt/built/* dependencies/
 RUN dpkg -i dependencies/*; apt-get -y -f install
 
 # Build tools and dependencies
