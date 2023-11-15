@@ -32,7 +32,7 @@
 #
 
 from __future__ import absolute_import, division, print_function
-
+import tkinter
 import sys
 import pandas as pd
 import numpy as np
@@ -52,6 +52,13 @@ from itertools import cycle
 from copy import copy
 import warnings
 import daemon
+import tkinter as tk
+
+# PEP-440
+if sys.version_info >= (3,12):
+    from packaging.version import parse as VersionParse
+else:
+    from distutils.version import LooseVersion as VersionParse
 
 from emane_spectrum_tools.streamer import SpectrumEnergyStreamer
 
@@ -116,7 +123,10 @@ class SpectrumAnalyzer(object):
         plt.rc('xtick', labelsize=8)
         plt.rc('ytick', labelsize=8)
         plt.rc('legend', fontsize=7)
-        self._fig = plt.gcf()
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', r'Starting a Matplotlib GUI outside of the main thread will likely fail.')
+            self._fig = plt.gcf()
 
         main_grid = gridspec.GridSpec(1 + self._with_waveforms,1)
         main_grid.update(hspace=.7)
@@ -192,9 +202,7 @@ class SpectrumAnalyzer(object):
 
             self._fig.canvas.mpl_connect('key_press_event', press)
 
-
-        self._fig.canvas.set_window_title('EMANE Spectrum Analyzer [{}]'.format(endpoint))
-
+        plt.get_current_fig_manager().set_window_title('EMANE Spectrum Analyzer [{}]'.format(endpoint))
 
     def _create_df(self,subid_info,subid_wf_select,store):
         subids = set()
@@ -505,12 +513,24 @@ class SpectrumAnalyzer(object):
         return artists
 
     def run(self):
-        ani = animation.FuncAnimation(self._fig,
-                                      self._update,
-                                      init_func=lambda : [],
-                                      interval=10,
-                                      blit=True)
-        plt.show()
+        if VersionParse(mpl.__version__) >= \
+           VersionParse('3.8.0'):
+            ani = animation.FuncAnimation(self._fig,
+                                          self._update,
+                                          init_func=lambda : [],
+                                          interval=10,
+                                          blit=True,
+                                          cache_frame_data=False)
+        else:
+            ani = animation.FuncAnimation(self._fig,
+                                          self._update,
+                                          init_func=lambda : [],
+                                          interval=10,
+                                          blit=True)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', r'Starting a Matplotlib GUI outside of the main thread will likely fail.')
+            plt.show()
 
 argument_parser = ArgumentParser()
 
@@ -586,17 +606,10 @@ def do_main():
 
     stream.stop()
 
-
-
-# avoid DaemonContext with older daemon (CentOS 7)
-try:
-    v = daemon.version.version
-    do_main()
-except:
-    with daemon.DaemonContext(stdout=sys.stdout,
-                              stderr=sys.stderr):
-        try:
-            do_main()
-        except:
-            print(traceback.format_exc(),
-                  file=sys.stderr)
+with daemon.DaemonContext(stdout=sys.stdout,
+                          stderr=sys.stderr):
+    try:
+        do_main()
+    except:
+        print(traceback.format_exc(),
+              file=sys.stderr)

@@ -38,18 +38,20 @@ emane_spectrum_tools/interface/record_pb2.py: ../emane-spectrum-ota-recorder/rec
 	protoc -I../emane-spectrum-ota-recorder --python_out=emane_spectrum_tools/interface  $<
 
 
-setup.py:	setup.py.in
+setup.py: setup.py.in
 	if test -f $@; then chmod u+w $@; fi
 	$(edit) $< > $@
 	chmod g-w,u-w $@
 
 install-exec-hook: $(BUILT_SOURCES)
 	$(PYTHON) setup.py install \
-	    -O1 \
+        -O1 \
+        --single-version-externally-managed \
         --record .installedfiles \
-	    --prefix=$(prefix) \
-	    --exec-prefix=$(exec_prefix) \
-	    $(if $(DESTDIR),--root=$(DESTDIR))
+        --prefix=$(prefix) \
+        --exec-prefix=$(exec_prefix) \
+        $(if $(DESTDIR),--root=$(DESTDIR)) \
+        $(if $(subst false,,$(HAVE_DEB)),--install-layout=deb)
 
 uninstall-hook:
 	if test -f .installedfiles; then xargs -a .installedfiles rm -f; fi

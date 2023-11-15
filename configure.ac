@@ -1,5 +1,5 @@
 AC_COPYRIGHT([
- Copyright (c) 2019-2022 - Adjacent Link LLC, Bridgewater, New Jersey
+ Copyright (c) 2019-2023 - Adjacent Link LLC, Bridgewater, New Jersey
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@ AC_COPYRIGHT([
  See toplevel COPYING for more information.
 ])
 
-AC_INIT([emane-spectrum-tools],0.2.8,[labs at adjacentlink dot com])
+AC_INIT([emane-spectrum-tools],[0.2.9],[labs at adjacentlink dot com])
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -48,7 +48,7 @@ AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
 
 AC_PROG_INSTALL
 
-AC_PROG_LIBTOOL
+LT_INIT
 
 AC_LANG([C++])
 
@@ -69,8 +69,17 @@ AC_ARG_VAR([emane_SRC_ROOT],[emane source root directory.])
 PKG_CHECK_MODULES([libemane], libemane)
 PKG_CHECK_MODULES([protobuf],protobuf)
 PKG_CHECK_MODULES([libzmq],libzmq)
+PKG_CHECK_MODULES([libotestpoint],libotestpoint)
 
-AM_PATH_PYTHON([2.7])
+AC_ARG_VAR([libotestpoint_PROTODIR],[protobuf libotestpoint directory])
+
+if test "${libotestpoint_PROTODIR}" == ""; then
+   libotestpoint_PROTODIR=$(pkg-config libotestpoint --variable=protodir)
+fi
+
+AC_SUBST(libotestpoint_PROTODIR)
+
+AM_PATH_PYTHON([3.6])
 
 AS_IF([test -n "${emane_SRC_ROOT}"],[] ,
 AC_MSG_ERROR("Missing emane_SRC_ROOT. emane-spectrum-tools requires
@@ -135,12 +144,13 @@ AC_SUBST(DEBIAN_VERSION)
 AC_SUBST(DATE_RFC2822,`date -R`)
 
 
-AC_OUTPUT(
- Makefile
+AC_CONFIG_FILES([Makefile
  src/Makefile
  src/emane-spectrum-monitor/Makefile
  src/emane-spectrum-ota-recorder/Makefile
  src/libemane-spectrum-monitor/Makefile
  src/python/Makefile
+ src/opentestpoint-probe/Makefile
  doc/Makefile
-)
+])
+AC_OUTPUT

@@ -39,6 +39,12 @@ missing
 src/python/build
 src/python/setup.py
 
+# otestpoint probe
+src/opentestpoint-probe/build
+src/opentestpoint-probe/otestpoint/emane_spectrum_tools/monitor.proto
+src/opentestpoint-probe/otestpoint/emane_spectrum_tools/probe-emane-spectrum-tools-monitor.xsd
+src/opentestpoint-probe/setup.py
+
 # dist
 emane-spectrum-tools-*.tar.gz
 
