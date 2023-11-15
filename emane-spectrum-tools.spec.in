@@ -67,7 +67,7 @@ ln -s emane-spectrum-analyzer-3 %{buildroot}%{_bindir}/emane-spectrum-analyzer
 ln -s emane-spectrum-ota-record-tool-3 %{buildroot}%{_bindir}/emane-spectrum-ota-record-tool
 ln -s emane-spectrum-energy-recording-tool-3 %{buildroot}%{_bindir}/emane-spectrum-energy-recording-tool
 
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*-%{python3_version}
+%py3_shebang_fix %{buildroot}%{_bindir}/*-%{python3_version}
 
 find ${RPM_BUILD_ROOT} -name '*.a' -exec rm '{}'  \;
 find ${RPM_BUILD_ROOT} -name '*.la' -exec rm '{}' \;
