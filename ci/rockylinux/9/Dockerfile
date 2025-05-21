@@ -3,7 +3,7 @@ FROM rockylinux:9
 RUN mkdir -p /opt/built
 
 RUN dnf -y update
-RUN dnf -y install epel-release dnf-plugins-core centos-release-openstack-dalmatian
+RUN dnf -y install epel-release dnf-plugins-core
 RUN dnf config-manager --enable crb
 RUN dnf clean all
 
@@ -26,6 +26,11 @@ RUN cd emane && ./autogen.sh && ./configure && make
 ENV emane_SRC_ROOT=/opt/emane
 
 RUN git clone https://github.com/adjacentlink/emane-spectrum-tools -b develop
+
+# install centos-release-openstack-dalmatian to handle pandas dependency
+# place here to avoid confounding protobuf version from main line repos
+# used during build
+RUN dnf -y install centos-release-openstack-dalmatian
 
 WORKDIR emane-spectrum-tools
 RUN ./autogen.sh && ./configure && make rpm
