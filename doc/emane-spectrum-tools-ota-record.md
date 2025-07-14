@@ -219,11 +219,11 @@ uniquely identified by `ota_source`, `ota_sequence`,
 
 27. `pitch_degrees`: (`DOUBLE`) Transmitting NEM's orientation
     pitch in degrees. Optional and only present when location events
-    containing oricentation are published.
+    containing orientation are published.
 
 28. `yaw_degrees`: (`DOUBLE`) Transmitting NEM's orientation
     yaw in degrees. Optional and only present when location events
-    containing oricentation are published.
+    containing orientation are published.
 
 More information on [platform orientation][3] and [profile defined
 antennas][4] can be found on the EMANE Wiki.

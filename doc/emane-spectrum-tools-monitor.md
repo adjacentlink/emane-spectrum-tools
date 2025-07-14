@@ -258,11 +258,11 @@ frequency and time binned energy measurements uniquely identified by
 
 18. `pitch_degrees`: (`DOUBLE`) Monitoring NEM's orientation
     pitch in degrees. Optional and only present when location events
-    containing oricentation are published.
+    containing orientation are published.
 
 19. `yaw_degrees`: (`DOUBLE`) Monitoring NEM's orientation yaw
     in degrees. Optional and only present when location events
-    containing oricentation are published.
+    containing orientation are published.
 
 20. `bin_0` - `bin_N`: (`DOUBLE`) Time binned receive energy in
     mW. Each bin is `bandwidth_hz` wide with time boundaries that

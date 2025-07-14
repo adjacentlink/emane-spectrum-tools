@@ -263,8 +263,15 @@ try:
 
             # only process emulator physcial layer instance data
             if phy_header.registrationId == 7:
-                mac_header = commonmacheader_pb2.CommonMACHeader()
-                mac_header.ParseFromString(record.ota.common_mac_header)
+
+                if record.ota.HasField('common_mac_header'):
+                    mac_header = commonmacheader_pb2.CommonMACHeader()
+                    mac_header.ParseFromString(record.ota.common_mac_header)
+                    mac_registration_id = mac_header.registrationId
+                    mac_sequence_number = mac_header.sequenceNumber
+                else:
+                    mac_registration_id = format_nan
+                    mac_sequence_number = format_nan
 
                 for transmitter in phy_header.transmitters:
                     for antenna in phy_header.transmitAntennas:
@@ -303,8 +310,8 @@ try:
                                       record.ota.sequence,
                                       phy_header.subId,
                                       phy_header.sequenceNumber,
-                                      mac_header.registrationId,
-                                      mac_header.sequenceNumber,
+                                      mac_registration_id,
+                                      mac_sequence_number,
                                       transmitter.nemId,
                                       antenna.antennaIndex,
                                       antenna.bandwidthHz,
@@ -327,8 +334,8 @@ try:
                                                     record.ota.sequence,
                                                     phy_header.subId,
                                                     phy_header.sequenceNumber,
-                                                    mac_header.registrationId,
-                                                    mac_header.sequenceNumber,
+                                                    mac_registration_id,
+                                                    mac_sequence_number,
                                                     transmitter.nemId,
                                                     antenna.antennaIndex,
                                                     antenna.bandwidthHz,

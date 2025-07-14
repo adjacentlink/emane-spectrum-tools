@@ -202,7 +202,10 @@ class SpectrumAnalyzer(object):
 
             self._fig.canvas.mpl_connect('key_press_event', press)
 
-        plt.get_current_fig_manager().set_window_title('EMANE Spectrum Analyzer [{}]'.format(endpoint))
+        if args['title']:
+            plt.get_current_fig_manager().set_window_title(args['title'])
+        else:
+            plt.get_current_fig_manager().set_window_title('EMANE Spectrum Analyzer [{}]'.format(endpoint))
 
     def _create_df(self,subid_info,subid_wf_select,store):
         subids = set()
@@ -569,6 +572,11 @@ argument_parser.add_argument('--subid-name',
                              type=str,
                              action='append',
                              help='subid name mapping: <id>,<name>')
+
+argument_parser.add_argument('--title',
+                             type=str,
+                             help='window title')
+
 
 ns = argument_parser.parse_args()
 
