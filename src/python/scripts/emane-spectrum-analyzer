@@ -32,7 +32,7 @@
 #
 
 from __future__ import absolute_import, division, print_function
-import tkinter
+
 import sys
 import pandas as pd
 import numpy as np
@@ -52,7 +52,6 @@ from itertools import cycle
 from copy import copy
 import warnings
 import daemon
-import tkinter as tk
 
 # PEP-440
 if sys.version_info >= (3,12):
