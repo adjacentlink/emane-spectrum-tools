@@ -124,6 +124,7 @@ namespace EMANE
       Microseconds timeSyncThreshold_;
       bool bNoiseMaxClamp_;
       double dSystemNoiseFiguredB_;
+      bool bHorizonCheckEnable_;
       StatisticNumeric<std::uint64_t> * pTimeSyncThresholdRewrite_;
       StatisticNumeric<std::uint64_t> * pGainCacheHit_;
       StatisticNumeric<std::uint64_t> * pGainCacheMiss_;

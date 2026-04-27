@@ -57,7 +57,8 @@ namespace EMANE
                           SpectrumMonitorAlt * pSpectrumMonitorAlt,
                           PropagationModelAlgorithm * pPropagationModelAlgorithm,
                           FadingAlgorithmStore && fadingAlgorithmStore,
-                          bool bPopulateReceivePowerMap);
+                          bool bPopulateReceivePowerMap,
+                          bool bHorizonCheckEnable);
 
       struct ProcessResult
       {

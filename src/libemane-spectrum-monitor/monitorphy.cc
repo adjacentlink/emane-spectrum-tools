@@ -131,6 +131,7 @@ EMANE::SpectrumTools::MonitorPhy::MonitorPhy(NEMId id,
   timeSyncThreshold_{},
   bNoiseMaxClamp_{},
   dSystemNoiseFiguredB_{},
+  bHorizonCheckEnable_{},
   pTimeSyncThresholdRewrite_{},
   pGainCacheHit_{},
   pGainCacheMiss_{},
@@ -212,6 +213,13 @@ void EMANE::SpectrumTools::MonitorPhy::initialize(Registrar & registrar)
                                                   1,
                                                   1,
                                                   "^(precomputed|2ray|freespace)$");
+
+  configRegistrar.registerNumeric<bool>("horizoncheckenable",
+                                        EMANE::ConfigurationProperties::DEFAULT,
+                                        {true},
+                                        "Defines whether the horizon check is enabled. The horizon check drops"
+                                        " receive packets when the transmitter is beyond line of sight to the horizon"
+                                        " regardless of receive gain calculation.");
 
   configRegistrar.registerNumeric<std::uint64_t>("spectrumquery.rate",
                                                  EMANE::ConfigurationProperties::DEFAULT,
@@ -430,6 +438,18 @@ void EMANE::SpectrumTools::MonitorPhy::configure(const ConfigurationUpdate & upd
                                   __func__,
                                   item.first.c_str(),
                                   dSystemNoiseFiguredB_);
+        }
+      else if(item.first == "horizoncheckenable")
+        {
+          bHorizonCheckEnable_ = item.second[0].asBool();
+
+          LOGGER_STANDARD_LOGGING(pPlatformService_->logService(),
+                                  INFO_LEVEL,
+                                  "PHYI %03hu MonitorPhy::%s: %s = %s",
+                                  id_,
+                                  __func__,
+                                  item.first.c_str(),
+                                  bHorizonCheckEnable_ ? "on" : "off");
         }
       else if(item.first == "spectrumquery.rate")
         {
@@ -712,7 +732,8 @@ void EMANE::SpectrumTools::MonitorPhy::processUpstreamPacket_i(const TimePoint &
                                                                                                                         pSpectrumMonitorAlt,
                                                                                                                         pPropagationModelAlgorithm_.get(),
                                                                                                                         fadingManager_.createFadingAlgorithmStore(),
-                                                                                                                        bStatsReceivePowerTableEnable_})))).first;
+                                                                                                                        bStatsReceivePowerTableEnable_,
+                                                                                                                        bHorizonCheckEnable_})))).first;
 
     }
   else

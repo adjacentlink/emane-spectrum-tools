@@ -97,6 +97,7 @@ int main(int argc, char* argv[])
           {"fading.nakagami.m2", 1, nullptr, 1},
           {"fixedantennagain", 1, nullptr, 1},
           {"fixedantennagainenable", 1, nullptr, 1},
+          {"horizoncheckenable", 1, nullptr, 1},
           {"noisebinsize", 1, nullptr, 1},
           {"noisemaxclampenable", 1, nullptr, 1},
           {"noisemaxmessagepropagation", 1, nullptr, 1},
@@ -212,6 +213,7 @@ int main(int argc, char* argv[])
               std::cout<<"  --fading.nakagami.m2 VALUE **"<<std::endl;
               std::cout<<"  --fixedantennagain VALUE **"<<std::endl;
               std::cout<<"  --fixedantennagainenable VALUE **"<<std::endl;
+              std::cout<<"  --horizoncheckenable VALUE **"<<std::endl;
               std::cout<<"  --noisemaxclampenable VALUE **"<<std::endl;
               std::cout<<"  --noisemaxmessagepropagation VALUE **"<<std::endl;
               std::cout<<"  --noisemaxsegmentduration VALUE **"<<std::endl;
