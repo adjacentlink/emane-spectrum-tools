@@ -111,14 +111,14 @@ EMANE::SpectrumTools::ReceiveProcessorAlt::process(const TimePoint & now,
               // calculate the combined gain (Tx + Rx antenna gain) dBi
               // note: gain manager accesses antenna profiles, knows self node profile info
               //       if available, and is updated with all nodes profile info
-              auto gainInfodBi = gainManager_.determineGain(transmitter.getNEMId(),
+              auto gainInfo = gainManager_.determineGain(transmitter.getNEMId(),
                                                             transmitAntenna.getIndex(),
                                                             locationInfo.first);
 
               // if gain is available
-              if(std::get<2>(gainInfodBi) == EMANE::GainManager::GainStatus::SUCCESS)
+              if(gainInfo.status_ == EMANE::GainManager::GainStatus::SUCCESS)
                 {
-                  result.bGainCacheHit_ = std::get<3>(gainInfodBi);
+                  result.bGainCacheHit_ = gainInfo.bCacheHit_;
 
                   //using ReceivePowerPubisherUpdate = std::tuple<NEMId,std::uint64_t,double>;
 
@@ -144,9 +144,9 @@ EMANE::SpectrumTools::ReceiveProcessorAlt::process(const TimePoint & now,
                         transmitter.getPowerdBm()};
 
                       double dPowerdBm{dTxPowerdBm +
-                        std::get<0>(gainInfodBi)  +
-                        std::get<1>(gainInfodBi) -
-                        dPathlossdB};
+                                       gainInfo.entry_.dRemoteAntennaGaindBi_  +
+                                       gainInfo.entry_.dLocalAntennaGaindBi_ -
+                                       dPathlossdB};
 
                       if(fadingInfo.second)
                         {
@@ -202,11 +202,12 @@ EMANE::SpectrumTools::ReceiveProcessorAlt::process(const TimePoint & now,
                           result.receivePowerMap_[std::make_tuple(transmitter.getNEMId(),
                                                                   rxAntennaIndex_,
                                                                   transmitAntenna.getIndex(),
-                                                                  freqIter->getFrequencyHz())] =std::make_tuple(Utils::MILLIWATT_TO_DB(dRxPowerSegmentsMilliWatt),
-                                                                                                                std::get<0>(gainInfodBi),
-                                                                                                                std::get<1>(gainInfodBi),
-                                                                                                                dTxPowerdBm,
-                                                                                                                dPathlossdB);
+                                                                  freqIter->getFrequencyHz())] =
+                            std::make_tuple(Utils::MILLIWATT_TO_DB(dRxPowerSegmentsMilliWatt),
+                                            gainInfo.entry_.dRemoteAntennaGaindBi_,
+                                            gainInfo.entry_.dLocalAntennaGaindBi_,
+                                            dTxPowerdBm,
+                                            dPathlossdB);
                         }
 
                       ++freqIter;
@@ -230,7 +231,7 @@ EMANE::SpectrumTools::ReceiveProcessorAlt::process(const TimePoint & now,
               else
                 {
                   // drop due to GainManager not enough info
-                  switch(std::get<2>(gainInfodBi))
+                  switch(gainInfo.status_)
                     {
                     case GainManager::GainStatus::ERROR_LOCATIONINFO:
                       result.status_ = ProcessResult::Status::DROP_CODE_GAINMANAGER_LOCATION;
