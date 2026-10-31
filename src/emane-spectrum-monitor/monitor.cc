@@ -37,6 +37,7 @@
 
 #include <emane/application/logger.h>
 #include <emane/application/nembuilder.h>
+#include <emane/application/activitycoordinator.h>
 #include <emane/utils/parameterconvert.h>
 #include <emane/exception.h>
 
@@ -127,6 +128,7 @@ int main(int argc, char* argv[])
           {"stats.ota.maxeventcountrows", 1, nullptr, 5},
           {"stats.ota.maxpacketcountrows", 1, nullptr, 5},
           {"spectralmaskmanifesturi", 1, nullptr, 5},
+          {"simulation", 0, nullptr, 6},
           {nullptr, 0, nullptr, 0},
         };
 
@@ -135,6 +137,7 @@ int main(int argc, char* argv[])
       EMANE::NEMId id{};
       bool bDaemonize{};
       bool bRealtime{};
+      bool bSimulation{};
       int  iLogLevel{DEFAULT_LOG_LEVEL};
       int  iPriority{DEFAULT_PRIORITY_LEVEL};
       std::string sLogFile{};
@@ -158,6 +161,12 @@ int main(int argc, char* argv[])
             case 'h':
               // --help
               std::cout<<"usage: emane-spectrum-monitor [OPTIONS]... "<<std::endl;
+              std::cout<<"usage:  emane-spectrum-monitor [OPTIONS]... --simulation"
+                       <<" CONFIG_URL"
+                       <<" ACTIVITY_SERVICE_SUBSCRIBE_ENDPOINT"
+                       <<" ACTIVITY_SERVICE_PUBLISH_ENDPOINT"
+                       <<" ACTIVITY_SERVICE_TAG"
+                       <<std::endl;
               std::cout<<std::endl;
               std::cout<<"options:"<<std::endl;
               std::cout<<"  -c, --config FILE              Read configuration from file."<<std::endl;
@@ -172,6 +181,7 @@ int main(int argc, char* argv[])
               std::cout<<"                                 Only used with -r, --realtime."<<std::endl;
               std::cout<<"                                  default: "<<DEFAULT_PRIORITY_LEVEL<<std::endl;
               std::cout<<"  -r, --realtime                 Set realtime scheduling."<<std::endl;
+              std::cout<<"  --simulation                   Enable simulation mode."<<std::endl;
               std::cout<<"  --uuidfile FILE                Write the application instance UUID to file."<<std::endl;
               std::cout<<"  -v, --version                  Print version and exit."<<std::endl;
               std::cout<<std::endl;
@@ -244,6 +254,10 @@ int main(int argc, char* argv[])
 
             case 5:
               emuConfigArgs.insert({options[iOptionIndex].name,{optarg}});
+              break;
+
+            case 6:
+              bSimulation = true;
               break;
 
             case 'r':
@@ -321,10 +335,77 @@ int main(int argc, char* argv[])
             }
         }
 
-      if(optind != argc)
+      EMANE::INETAddr simulationCoordinatorEndpoint{};
+      EMANE::INETAddr activityServiceEndpoint{};
+      std::string sActivityServiceTag{};
+
+      if(bSimulation)
         {
-          std::cerr<<"Error too many parameters. See `emane-spectrum-monitor --help`."<<std::endl;
-          return EXIT_FAILURE;
+          if(optind >= argc)
+            {
+              std::cerr<<"missing SIMULATION_COORDINATOR_ENDPOINT"<<std::endl;
+              return EXIT_FAILURE;
+            }
+          else
+            {
+              std::string sSimulationCoordinatorEndpoint{argv[optind++]};
+
+              try
+                {
+                  simulationCoordinatorEndpoint =
+                    EMANE::Utils::ParameterConvert{sSimulationCoordinatorEndpoint}.toINETAddr();
+                }
+              catch(...)
+                {
+                  std::cerr<<"invalid SIMULATION_COORDINATOR_ENDPOINT: "
+                           <<sSimulationCoordinatorEndpoint
+                           <<std::endl;
+
+                  return EXIT_FAILURE;
+                }
+            }
+
+          if(optind >= argc)
+            {
+              std::cerr<<"missing ACTIVITY_SERVICE_ENDPOINT"<<std::endl;
+              return EXIT_FAILURE;
+            }
+          else
+            {
+              std::string sActivityServiceEndpoint{argv[optind++]};
+
+              try
+                {
+                  activityServiceEndpoint =
+                    EMANE::Utils::ParameterConvert{sActivityServiceEndpoint}.toINETAddr();
+                }
+              catch(...)
+                {
+                  std::cerr<<"invalid ACTIVITY_SERVICE_ENDPOINT: "
+                           <<sActivityServiceEndpoint
+                           <<std::endl;
+
+                  return EXIT_FAILURE;
+                }
+            }
+
+          if(optind >= argc)
+            {
+              std::cerr<<"missing ACTIVITY_SERVICE_TAG"<<std::endl;
+              return EXIT_FAILURE;
+            }
+          else
+            {
+              sActivityServiceTag = argv[optind++];
+            }
+        }
+      else
+        {
+          if(optind != argc)
+            {
+              std::cerr<<"Error too many parameters. See `emane-spectrum-monitor --help`."<<std::endl;
+              return EXIT_FAILURE;
+            }
         }
 
       if(!id && configurationFile.id())
@@ -378,13 +459,6 @@ int main(int argc, char* argv[])
           ss<<argv[i]<<" ";
         }
 
-      // create application instance UUID
-      uuid_t uuid;
-      uuid_generate(uuid);
-
-      char uuidBuf[37];
-      uuid_unparse(uuid,uuidBuf);
-
       if(bRealtime)
         {
           struct sched_param schedParam{iPriority};
@@ -411,6 +485,28 @@ int main(int argc, char* argv[])
           logger.log(EMANE::ERROR_LEVEL,"Please consider using the realtime scheduler to improve fidelity.");
         }
 
+      // create application instance UUID
+      uuid_t uuid;
+      uuid_generate(uuid);
+
+      EMANE::Application::ActivityCoordinator activityCoordinator{};
+
+      if(bSimulation)
+        {
+          // using remote activity coordination (simulation)
+          activityCoordinator.openRemote(uuid,
+                                         simulationCoordinatorEndpoint,
+                                         activityServiceEndpoint,
+                                         sActivityServiceTag);
+        }
+      else
+        {
+          // using local activity coordination (emulation)
+          activityCoordinator.openLocal();
+        }
+
+      char uuidBuf[37];
+      uuid_unparse(uuid,uuidBuf);
 
       logger.log(EMANE::INFO_LEVEL,"application: %s",ss.str().c_str());
       logger.log(EMANE::INFO_LEVEL,"application uuid: %s",uuidBuf);
